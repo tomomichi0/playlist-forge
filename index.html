@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Playlist Forge</title>
+
+<!-- iPhoneホーム画面追加用 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Playlist Forge">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23121417'/%3E%3Ccircle cx='90' cy='90' r='58' fill='none' stroke='%231DB954' stroke-width='6'/%3E%3Cpath d='M60 70 Q90 55 120 70 M58 92 Q90 75 122 92 M62 114 Q90 100 118 114' stroke='%231DB954' stroke-width='7' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+
+<style>
+  :root{
+    --bg: #0d0f11;
+    --panel: #16191c;
+    --panel-2: #1e2226;
+    --line: #262b30;
+    --ink: #eef1f0;
+    --ink-dim: #9aa3a0;
+    --accent: #1DB954;
+    --accent-dim: #14803c;
+    --warn: #e07856;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #1a2420 0%, transparent 60%),
+      var(--bg);
+    color:var(--ink);
+    font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    min-height:100%;
+  }
+  .wrap{
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 28px 20px 60px;
+  }
+  header{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    margin-bottom: 6px;
+  }
+  .mark{
+    width:14px; height:14px; border-radius:50%;
+    background: var(--accent);
+    box-shadow: 0 0 14px var(--accent);
+    flex-shrink:0;
+    margin-bottom:3px;
+  }
+  h1{
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin:0;
+  }
+  .sub{
+    color: var(--ink-dim);
+    font-size: 14px;
+    margin: 4px 0 28px;
+    line-height:1.6;
+  }
+  .card{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .card-title{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-dim);
+    margin: 0 0 14px;
+    font-weight:600;
+  }
+  input[type=text], textarea{
+    width:100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+  }
+  input[type=text]:focus, textarea:focus{
+    border-color: var(--accent-dim);
+  }
+  textarea{
+    min-height: 160px;
+    resize: vertical;
+    line-height: 1.7;
+  }
+  label.field{
+    display:block;
+    font-size:12px;
+    color: var(--ink-dim);
+    margin: 14px 0 6px;
+  }
+  label.field:first-child{margin-top:0;}
+  .row{
+    display:flex;
+    gap:10px;
+    align-items:center;
+  }
+  .toggle{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:14px;
+    color: var(--ink-dim);
+    margin-top: 14px;
+  }
+  button{
+    appearance:none;
+    border:none;
+    border-radius: 999px;
+    padding: 14px 22px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor:pointer;
+    width:100%;
+    font-family: inherit;
+    transition: transform .12s ease, opacity .12s ease;
+  }
+  button:active{ transform: scale(0.98); }
+  .btn-primary{
+    background: var(--accent);
+    color: #06170c;
+  }
+  .btn-primary:disabled{
+    opacity:0.4;
+  }
+  .btn-ghost{
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--ink);
+  }
+  .status{
+    font-size: 13px;
+    color: var(--ink-dim);
+    margin-top: 12px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+  .status .ok{ color: var(--accent); }
+  .status .ng{ color: var(--warn); }
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    background: var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:999px;
+    padding: 6px 12px;
+    font-size:12px;
+    color: var(--ink-dim);
+  }
+  .pill .dot{
+    width:7px;height:7px;border-radius:50%;
+    background: var(--warn);
+  }
+  .pill.on .dot{ background: var(--accent); }
+  .result-link{
+    display:block;
+    margin-top: 14px;
+    text-align:center;
+    background: var(--panel-2);
+    border:1px solid var(--accent-dim);
+    color: var(--accent);
+    padding: 12px;
+    border-radius: 12px;
+    text-decoration:none;
+    font-weight:600;
+    font-size: 14px;
+  }
+  .setup-note{
+    font-size: 12px;
+    color: var(--ink-dim);
+    line-height: 1.7;
+  }
+  .setup-note code{
+    background: var(--panel-2);
+    padding: 1px 6px;
+    border-radius: 6px;
+    color: var(--ink);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="mark"></div>
+    <h1>Playlist Forge</h1>
+  </header>
+  <p class="sub">曲リストを貼り付けるだけで、Spotifyプレイリストを自動生成するよ。</p>
+
+  <div class="card">
+    <p class="card-title">接続状態</p>
+    <div class="row" style="justify-content:space-between;">
+      <span id="authPill" class="pill"><span class="dot"></span><span id="authText">未接続</span></span>
+      <button id="connectBtn" class="btn-ghost" style="width:auto; padding:10px 18px;">Spotifyに接続</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="card-title">初回セットアップ (最初の1回だけ)</p>
+    <label class="field">Spotify Client ID</label>
+    <input type="text" id="clientId" placeholder="Spotify Dashboardで取得したClient ID">
+    <p class="setup-note" style="margin-top:10px;">
+      developer.spotify.com/dashboard でアプリ登録 → Redirect URI にこのページの URL をそのまま登録してね（例: <code id="thisUrl">-</code>）。Client Secret は不要だよ(PKCE方式)。
+    </p>
+  </div>
+
+  <div class="card">
+    <p class="card-title">プレイリスト</p>
+    <label class="field">プレイリスト名</label>
+    <input type="text" id="playlistName" placeholder="例: 今日の気分" value="AI Generated Playlist">
+
+    <label class="field">曲リスト（1行に1曲「曲名 - アーティスト名」）</label>
+    <textarea id="songList" placeholder="Lemon - 米津玄師&#10;Pretender - Official髭男dism&#10;アイドル - YOASOBI"></textarea>
+
+    <div class="toggle">
+      <input type="checkbox" id="isPublic">
+      <label for="isPublic">公開プレイリストにする</label>
+    </div>
+  </div>
+
+  <button id="createBtn" class="btn-primary" disabled>プレイリストを作る</button>
+
+  <div id="status" class="status"></div>
+  <a id="resultLink" class="result-link" style="display:none;" target="_blank" rel="noopener">Spotifyでプレイリストを開く →</a>
+
+</div>
+
+<script>
+(function(){
+  const REDIRECT_URI = location.origin + location.pathname;
+  document.getElementById('thisUrl').textContent = REDIRECT_URI;
+
+  const SCOPE = 'playlist-modify-public playlist-modify-private';
+  const LS_CLIENT_ID = 'pf_client_id';
+  const LS_TOKEN = 'pf_access_token';
+  const LS_TOKEN_EXPIRES = 'pf_token_expires';
+  const LS_REFRESH = 'pf_refresh_token';
+  const LS_VERIFIER = 'pf_code_verifier';
+
+  const el = (id) => document.getElementById(id);
+  const clientIdInput = el('clientId');
+  const connectBtn = el('connectBtn');
+  const authPill = el('authPill');
+  const authText = el('authText');
+  const createBtn = el('createBtn');
+  const statusBox = el('status');
+  const resultLink = el('resultLink');
+
+  clientIdInput.value = localStorage.getItem(LS_CLIENT_ID) || '';
+  clientIdInput.addEventListener('input', () => {
+    localStorage.setItem(LS_CLIENT_ID, clientIdInput.value.trim());
+  });
+
+  function log(msg, cls){
+    const line = document.createElement('div');
+    if(cls) line.className = cls;
+    line.textContent = msg;
+    statusBox.appendChild(line);
+    statusBox.scrollTop = statusBox.scrollHeight;
+  }
+  function clearLog(){ statusBox.innerHTML = ''; resultLink.style.display='none'; }
+
+  // ---- PKCE helpers ----
+  function randomString(len){
+    const arr = new Uint8Array(len);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, b => ('0'+b.toString(16)).slice(-2)).join('').slice(0, len);
+  }
+  async function sha256base64url(str){
+    const data = new TextEncoder().encode(str);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return btoa(String.fromCharCode(...new Uint8Array(hash)))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+
+  function isTokenValid(){
+    const exp = parseInt(localStorage.getItem(LS_TOKEN_EXPIRES) || '0', 10);
+    return !!localStorage.getItem(LS_TOKEN) && Date.now() < exp;
+  }
+
+  function updateAuthUI(){
+    if(isTokenValid()){
+      authPill.classList.add('on');
+      authText.textContent = '接続済み';
+      connectBtn.textContent = '再接続';
+      createBtn.disabled = false;
+    } else {
+      authPill.classList.remove('on');
+      authText.textContent = '未接続';
+      connectBtn.textContent = 'Spotifyに接続';
+      createBtn.disabled = true;
+    }
+  }
+
+  async function startAuth(){
+    const clientId = clientIdInput.value.trim();
+    if(!clientId){
+      alert('Client IDを先に入力してね');
+      return;
+    }
+    const verifier = randomString(64);
+    localStorage.setItem(LS_VERIFIER, verifier);
+    const challenge = await sha256base64url(verifier);
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      scope: SCOPE,
+      redirect_uri: REDIRECT_URI,
+      code_challenge_method: 'S256',
+      code_challenge: challenge,
+    });
+    location.href = 'https://accounts.spotify.com/authorize?' + params.toString();
+  }
+
+  async function exchangeCodeForToken(code){
+    const clientId = clientIdInput.value.trim() || localStorage.getItem(LS_CLIENT_ID);
+    const verifier = localStorage.getItem(LS_VERIFIER);
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: REDIRECT_URI,
+      client_id: clientId,
+      code_verifier: verifier,
+    });
+    const res = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {'Content-Type':'application/x-www-form-urlencoded'},
+      body,
+    });
+    const data = await res.json();
+    if(data.access_token){
+      localStorage.setItem(LS_TOKEN, data.access_token);
+      localStorage.setItem(LS_TOKEN_EXPIRES, String(Date.now() + (data.expires_in*1000) - 60000));
+      if(data.refresh_token) localStorage.setItem(LS_REFRESH, data.refresh_token);
+    }
+    updateAuthUI();
+  }
+
+  // ページ読み込み時、認証コードが付いてたら交換する
+  (async function handleRedirect(){
+    const url = new URL(location.href);
+    const code = url.searchParams.get('code');
+    if(code){
+      history.replaceState({}, '', REDIRECT_URI);
+      await exchangeCodeForToken(code);
+    }
+    updateAuthUI();
+  })();
+
+  connectBtn.addEventListener('click', startAuth);
+
+  // ---- Spotify API calls ----
+  async function apiFetch(path, options={}){
+    const token = localStorage.getItem(LS_TOKEN);
+    const res = await fetch('https://api.spotify.com/v1' + path, {
+      ...options,
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        ...(options.headers||{}),
+      },
+    });
+    if(!res.ok){
+      const errText = await res.text();
+      throw new Error(`API error ${res.status}: ${errText}`);
+    }
+    return res.json();
+  }
+
+  function parseSongList(raw){
+    return raw.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
+      if(line.includes(' - ')){
+        const [title, artist] = line.split(' - ');
+        return {title: title.trim(), artist: (artist||'').trim()};
+      }
+      return {title: line, artist: ''};
+    });
+  }
+
+  async function searchTrack(title, artist){
+    const q = artist ? `track:${title} artist:${artist}` : title;
+    const data = await apiFetch('/search?type=track&limit=1&q=' + encodeURIComponent(q));
+    const item = data.tracks && data.tracks.items && data.tracks.items[0];
+    return item || null;
+  }
+
+  createBtn.addEventListener('click', async () => {
+    clearLog();
+    createBtn.disabled = true;
+    try{
+      const name = el('playlistName').value.trim() || 'AI Generated Playlist';
+      const isPublic = el('isPublic').checked;
+      const songs = parseSongList(el('songList').value);
+
+      if(songs.length === 0){
+        log('曲リストが空だよ。1行1曲で貼り付けてね。', 'ng');
+        createBtn.disabled = false;
+        return;
+      }
+
+      log('プロフィール確認中...');
+      const me = await apiFetch('/me');
+
+      log(`プレイリスト作成中: ${name}`);
+      const playlist = await apiFetch(`/users/${me.id}/playlists`, {
+        method: 'POST',
+        body: JSON.stringify({ name, public: isPublic, description: 'Created via Playlist Forge' }),
+      });
+
+      const uris = [];
+      for(const s of songs){
+        const track = await searchTrack(s.title, s.artist);
+        if(track){
+          uris.push(track.uri);
+          log(`見つかった: ${track.name} - ${track.artists[0].name}`, 'ok');
+        } else {
+          log(`見つからなかった: ${s.title}${s.artist ? ' - '+s.artist : ''}`, 'ng');
+        }
+      }
+
+      for(let i=0; i<uris.length; i+=100){
+        await apiFetch(`/playlists/${playlist.id}/tracks`, {
+          method: 'POST',
+          body: JSON.stringify({ uris: uris.slice(i, i+100) }),
+        });
+      }
+
+      log(`\n完了！${uris.length}曲追加したよ。`, 'ok');
+      resultLink.href = playlist.external_urls.spotify;
+      resultLink.style.display = 'block';
+
+    } catch(err){
+      console.error(err);
+      log('エラー: ' + err.message, 'ng');
+    } finally {
+      createBtn.disabled = false;
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
