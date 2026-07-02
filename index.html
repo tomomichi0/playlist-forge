@@ -569,6 +569,13 @@ const KNOWN_COVER_CHANNELS = [
   'fleufleu',
   'dさん',
   'ピアノ楽譜',
+  // 「-Topic」を名乗っていても実際はオルゴール・BGMアレンジ等の非公式音源業者のチャンネル
+  'mobile melody series',
+  'orgel',
+  'オルゴール',
+  'power music workout',
+  '8d music',
+  'lalala tv',
 ];
 
 // 主要レコード会社・レーベル名(チャンネル名にこれが入ってれば最優先階層)
@@ -612,12 +619,20 @@ function hasDefinitelyNotOfficialSignal(snippet) {
   return DEFINITELY_NOT_OFFICIAL.some(kw => title.includes(kw) || channel.includes(kw));
 }
 
+// レコード会社が正規リリースした楽曲に自動で付与される定型文
+// 「Provided to YouTube by [配給会社]」は、Content ID経由の正規音源配信であることの強いシグナルだよ
+function hasProvidedToYoutubeSignal(snippet) {
+  const desc = (snippet.description || '').toLowerCase();
+  return desc.includes('provided to youtube by') || desc.includes('提供元:');
+}
+
 // 「公式最優先」階層判定：チャンネル名だけを見て最上位グループかどうかを決める
 // (タイトルに紛れ込む単語ではなく、投稿主のチャンネル自体が公式かどうかで判定するのがポイント)
 // ただしカバー確定シグナルがあれば、たとえチャンネル名が"Official"を名乗っていても除外する
 function isTopTierOfficial(snippet) {
   if (hasDefinitelyNotOfficialSignal(snippet)) return false; // カバー確定なら問答無用で対象外
   const channel = (snippet.channelTitle || '').toLowerCase();
+  if (hasProvidedToYoutubeSignal(snippet)) return true; // Content ID経由の正規配信は最優先で信頼する
   if (channel.includes('- topic')) return true; // YouTube自動生成トピックチャンネル(公式音源のみが対象)
   if (channel.includes('vevo')) return true;
   if (channel.endsWith('official') || channel.includes(' official') || channel.includes('official ')) return true;
@@ -633,6 +648,7 @@ function officialScore(snippet) {
   let score = 0;
 
   if (isTopTierOfficial(snippet)) score += 1000; // 最優先階層は常にトップ固定
+  if (hasProvidedToYoutubeSignal(snippet)) score += 40; // 同階層内でもさらに信頼度を上乗せ
   if (title.includes('official')) score += 30;
   if (title.includes('mv') || title.includes('music video')) score += 15;
   if (channel.includes('records') || channel.includes('レコード') || channel.includes('music entertainment')) score += 20;
