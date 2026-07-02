@@ -333,10 +333,24 @@ const SCOPES = "https://www.googleapis.com/auth/youtube";
 let accessToken = null;
 let tokenClient = null;
 let songs = []; // {query, candidates: [...], selectedIndex, status, isDup}
-let quotaUsed = 0; // 目安（search=100, playlists.insert=50, playlistItems.insert=50）
 let addMode = 'new'; // 'new' | 'existing'
 let userPlaylists = [];
 let finalOrder = []; // 並び替え後の曲配列
+
+// ===== クォータ管理(日付ベース・localStorageで永続化) =====
+function todayKey() {
+  const d = new Date();
+  return `pf_quota_${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+function getQuotaUsed() {
+  const v = localStorage.getItem(todayKey());
+  return v ? parseInt(v, 10) : 0;
+}
+function addQuota(amount) {
+  const current = getQuotaUsed();
+  localStorage.setItem(todayKey(), String(current + amount));
+  updateQuotaNote();
+}
 
 const els = {
   loginBtn: document.getElementById('loginBtn'),
@@ -370,7 +384,7 @@ const els = {
 };
 
 function updateQuotaNote() {
-  els.quotaNote.textContent = `本日の目安使用量: 約${quotaUsed} / 10,000 ユニット`;
+  els.quotaNote.textContent = `本日の目安使用量: 約${getQuotaUsed()} / 10,000 ユニット`;
 }
 
 function decodeHtmlEntities(str) {
@@ -467,25 +481,77 @@ els.searchBtn.addEventListener('click', async () => {
   updateQuotaNote();
 });
 
+// 既知の「カバー曲であることを明示しない」非公式チャンネル(悪質チャンネル)ブラックリスト
+// 小文字化して部分一致でチェックするよ
+const KNOWN_COVER_CHANNELS = [
+  'highnote',
+  'uta owl',
+  'utaowl',
+  'カラオケうたたね',
+  'カラオケの鉄人',
+  'joysound',
+  'damともチャンネル',
+  'la la tv',
+  'lalatv',
+  'karaoke',
+  'カラオケ歌市場',
+];
+
 // 公式らしさスコアリング
 function officialScore(snippet) {
   const channel = (snippet.channelTitle || '').toLowerCase();
   const title = (snippet.title || '').toLowerCase();
   let score = 0;
+
+  // 加点要素(公式らしさ)
   if (channel.includes('- topic')) score += 100; // YouTube自動生成トピックチャンネル(ほぼ公式音源)
   if (channel.includes('official')) score += 60;
   if (title.includes('official')) score += 30;
   if (title.includes('mv') || title.includes('music video')) score += 15;
   if (channel.includes('vevo')) score += 60;
-  if (title.includes('cover') || channel.includes('cover')) score -= 60;
-  if (title.includes('歌ってみた')) score -= 60;
-  if (title.includes('弾いてみた')) score -= 50;
-  if (title.includes('practice') || title.includes('弾き語り')) score -= 30;
+  if (channel.includes('records') || channel.includes('レコード') || channel.includes('music entertainment')) score += 20;
+
+  // 減点要素(カバー・歌ってみた・カラオケ系)
+  const negativeKeywords = [
+    'cover', 'カバー', '歌ってみた', '弾いてみた', '弾き語り',
+    'practice', 'karaoke', 'カラオケ', 'instrumental', 'inst.',
+    'off vocal', 'オフボーカル', '歌唱', '仮歌', 'モノマネ',
+    'sing', 'ボーカル講師', 'ボイトレ', 'アカペラ', 'acapella',
+    'remix by', 'session', 'セッション', 'ものまね',
+  ];
+  negativeKeywords.forEach(kw => {
+    if (title.includes(kw)) score -= 55;
+    if (channel.includes(kw)) score -= 70;
+  });
   if (title.includes('live') || title.includes('ライブ')) score -= 10;
+
+  // 既知の非公式チャンネル(カバー曲であることを明示しない悪質チャンネル含む)は問答無用で大幅減点
+  if (KNOWN_COVER_CHANNELS.some(bad => channel.includes(bad))) {
+    score -= 500;
+  }
+
   return score;
 }
 function isOfficialish(snippet) {
   return officialScore(snippet) >= 30;
+}
+function isBlacklisted(snippet) {
+  const channel = (snippet.channelTitle || '').toLowerCase();
+  return KNOWN_COVER_CHANNELS.some(bad => channel.includes(bad));
+}
+
+async function openResearchPrompt(index) {
+  const item = songs[index];
+  const newQuery = prompt('検索し直すキーワードを入力してね（アーティスト名を先頭に付けると精度上がるよ）', item.query);
+  if (newQuery === null) return;
+  const trimmed = newQuery.trim();
+  if (!trimmed) return;
+  item.query = trimmed;
+  item.status = 'searching';
+  item.candidates = [];
+  renderSongList();
+  await searchOneSong(index);
+  renderSongList();
 }
 
 async function searchOneSong(index) {
@@ -496,28 +562,30 @@ async function searchOneSong(index) {
     url.searchParams.set('q', item.query + ' 音楽');
     url.searchParams.set('type', 'video');
     url.searchParams.set('videoCategoryId', '10');
-    url.searchParams.set('maxResults', '5');
+    url.searchParams.set('maxResults', '8');
     const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
-    quotaUsed += 100;
+    addQuota(100);
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData?.error?.message || res.status);
     }
     const data = await res.json();
     if (data.items && data.items.length > 0) {
-      const scored = data.items.map(v => ({
-        videoId: v.id.videoId,
-        title: decodeHtmlEntities(v.snippet.title),
-        channel: v.snippet.channelTitle,
-        thumb: v.snippet.thumbnails?.default?.url || '',
-        score: officialScore(v.snippet),
-        official: isOfficialish(v.snippet)
-      }));
+      const scored = data.items
+        .filter(v => !isBlacklisted(v.snippet)) // 悪質チャンネルは候補から完全除外
+        .map(v => ({
+          videoId: v.id.videoId,
+          title: decodeHtmlEntities(v.snippet.title),
+          channel: v.snippet.channelTitle,
+          thumb: v.snippet.thumbnails?.default?.url || '',
+          score: officialScore(v.snippet),
+          official: isOfficialish(v.snippet)
+        }));
       // スコア順に並び替え（公式っぽいものを上に）
       scored.sort((a, b) => b.score - a.score);
-      item.candidates = scored.slice(0, 3);
-      item.selectedIndex = 0;
-      item.status = 'ok';
+      item.candidates = scored.slice(0, 5);
+      item.selectedIndex = item.candidates.length > 0 ? 0 : -1;
+      item.status = item.candidates.length > 0 ? 'ok' : 'none';
     } else {
       item.status = 'none';
     }
@@ -545,6 +613,12 @@ function renderSongList() {
       badge.textContent = '重複注意';
       header.appendChild(badge);
     }
+    const researchBtn = document.createElement('button');
+    researchBtn.className = 'btn-small';
+    researchBtn.textContent = '再検索';
+    researchBtn.style.flexShrink = '0';
+    researchBtn.addEventListener('click', () => openResearchPrompt(i));
+    header.appendChild(researchBtn);
     block.appendChild(header);
 
     if (item.status === 'searching') {
@@ -655,7 +729,7 @@ async function loadUserPlaylists() {
     url.searchParams.set('mine', 'true');
     url.searchParams.set('maxResults', '50');
     const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
-    quotaUsed += 1;
+    addQuota(1);
     updateQuotaNote();
     const data = await res.json();
     userPlaylists = data.items || [];
@@ -763,7 +837,7 @@ els.orderConfirmBtn.addEventListener('click', async () => {
           status: { privacyStatus: 'private' }
         })
       });
-      quotaUsed += 50;
+      addQuota(50);
       if (!createRes.ok) {
         const err = await createRes.json().catch(() => ({}));
         throw new Error(err?.error?.message || 'プレイリスト作成失敗');
@@ -790,7 +864,7 @@ els.orderConfirmBtn.addEventListener('click', async () => {
             }
           })
         });
-        quotaUsed += 50;
+        addQuota(50);
         if (addRes.ok) successCount++;
       } catch (e) {
         console.error('add error', item.query, e);
