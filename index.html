@@ -613,10 +613,40 @@ const DEFINITELY_NOT_OFFICIAL = [
   '歌枠', '切り抜き', 'すたぽら', '歌枠切り抜き', '弾いてみました',
 ];
 
+// 「オリジナルとは歌い手やアレンジが違うバージョン」を示すことが多いキーワード
+// (本人公式のTopicチャンネルに登録されていても、実は別歌手カバー+リミックスのような
+// 音源が紛れ込むケースがあるため、これらが検出されたら要注意フラグを立てる)
+// 注意: "live" など同一アーティストのライブ映像はここに含めない(別途liveでの減点あり)
+const VERSION_MISMATCH_SIGNALS = [
+  'remix', 'リミックス', 'mix]', 'mix)',
+  'feat.', 'ft.', 'フィーチャリング',
+];
+
+// フル尺ではない「短縮版・TVサイズ」を示すキーワード
+// (マスターがフル尺だけ聴きたい場合に、これらを検出して除外するために使う)
+const SHORT_VERSION_SIGNALS = [
+  'short ver', 'short version', 'tv size', 'tv-size', 'tvsize',
+  'tv edit', 'radio edit', 'テレビサイズ', '短縮版', 'ダイジェスト',
+];
+
 function hasDefinitelyNotOfficialSignal(snippet) {
   const channel = (snippet.channelTitle || '').toLowerCase();
   const title = (snippet.title || '').toLowerCase();
   return DEFINITELY_NOT_OFFICIAL.some(kw => title.includes(kw) || channel.includes(kw));
+}
+
+// タイトルに「歌手違い・リミックス版」らしきシグナルがあるかチェックする
+// (例: 「メルト (やなぎなぎ ver.) [CPK! Remix]」のような、公式Topicチャンネルに
+//  登録されていても中身がオリジナルと違うバージョンである可能性が高いケースを拾う)
+function hasVersionMismatchSignal(snippet) {
+  const title = (snippet.title || '').toLowerCase();
+  return VERSION_MISMATCH_SIGNALS.some(kw => title.includes(kw));
+}
+
+// タイトルに「短縮版・TVサイズ」を示すシグナルがあるかチェックする
+function hasShortVersionSignal(snippet) {
+  const title = (snippet.title || '').toLowerCase();
+  return SHORT_VERSION_SIGNALS.some(kw => title.includes(kw));
 }
 
 // レコード会社が正規リリースした楽曲に自動で付与される定型文
@@ -631,6 +661,7 @@ function hasProvidedToYoutubeSignal(snippet) {
 // ただしカバー確定シグナルがあれば、たとえチャンネル名が"Official"を名乗っていても除外する
 function isTopTierOfficial(snippet) {
   if (hasDefinitelyNotOfficialSignal(snippet)) return false; // カバー確定なら問答無用で対象外
+  if (hasVersionMismatchSignal(snippet)) return false; // 歌手違い・リミックス版らしきものも対象外
   const channel = (snippet.channelTitle || '').toLowerCase();
   if (hasProvidedToYoutubeSignal(snippet)) return true; // Content ID経由の正規配信は最優先で信頼する
   if (channel.includes('- topic')) return true; // YouTube自動生成トピックチャンネル(公式音源のみが対象)
@@ -800,7 +831,8 @@ async function searchOneSong(index) {
           score: officialScore(v.snippet),
           official: isOfficialish(v.snippet),
           definitelyNotOfficial: hasDefinitelyNotOfficialSignal(v.snippet),
-          titleMismatch: looksUnrelatedToQuery(item.query, decodeHtmlEntities(v.snippet.title))
+          titleMismatch: looksUnrelatedToQuery(item.query, decodeHtmlEntities(v.snippet.title)),
+          versionMismatch: hasVersionMismatchSignal(v.snippet)
         }));
       // スコア順に並び替え（公式っぽいものを上に）
       scored.sort((a, b) => b.score - a.score);
@@ -815,10 +847,10 @@ async function searchOneSong(index) {
 
       item.candidates = filtered.slice(0, 5);
 
-      // 公式候補がゼロ件で、かつ残った候補も全部「カバー確定」または「無関係」なら、
+      // 公式候補がゼロ件で、かつ残った候補も全部「カバー確定」「無関係」「バージョン違い」なら、
       // 実質的に「見つからなかった」扱いにする(誤検索の紛れ込みを避けるため)
       const allUnusable = item.candidates.length > 0 &&
-        item.candidates.every(c => c.definitelyNotOfficial || c.titleMismatch);
+        item.candidates.every(c => c.definitelyNotOfficial || c.titleMismatch || c.versionMismatch);
       if (officialOnly.length === 0 && allUnusable) {
         item.candidates = [];
         item.status = 'none';
@@ -940,6 +972,12 @@ function renderSongList() {
           wb.className = 'dup-badge';
           wb.textContent = '⚠曲名と不一致かも';
           ch.appendChild(wb);
+        }
+        if (c.versionMismatch) {
+          const vb = document.createElement('span');
+          vb.className = 'dup-badge';
+          vb.textContent = '⚠別バージョンかも';
+          ch.appendChild(vb);
         }
         info.appendChild(title);
         info.appendChild(ch);
