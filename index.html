@@ -15,6 +15,7 @@
     --sub: #9a9aa5;
     --border: #2a2a34;
     --success: #3ddc84;
+    --warn: #ffb454;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -48,6 +49,9 @@
     font-size: 15px;
     margin: 0 0 12px;
     color: var(--accent2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
   button {
     font-family: inherit;
@@ -74,8 +78,13 @@
   .btn-small {
     background: #2a2a34;
     color: var(--text);
-    padding: 8px 14px;
-    font-size: 13px;
+    padding: 7px 12px;
+    font-size: 12.5px;
+    border-radius: 8px;
+  }
+  .btn-small.active {
+    background: var(--accent);
+    color: white;
   }
   textarea, input[type=text] {
     width: 100%;
@@ -103,36 +112,86 @@
   }
   .user-badge .name { font-size: 14px; font-weight: 600; }
   .user-badge .email { font-size: 11px; color: var(--sub); }
-  .song-row {
+  .quota-note { font-size: 11px; color: var(--sub); margin-top: 8px; text-align: right; }
+
+  .warn-box {
+    background: rgba(255,180,84,0.1);
+    border: 1px solid rgba(255,180,84,0.3);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+    color: var(--warn);
+    margin-bottom: 12px;
+  }
+
+  .song-block {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .song-block:last-child { border-bottom: none; }
+  .song-block-header {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
   }
-  .song-row:last-child { border-bottom: none; }
-  .song-row img {
-    width: 56px; height: 42px; object-fit: cover; border-radius: 6px; flex-shrink: 0;
+  .song-query { font-size: 12.5px; color: var(--sub); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dup-badge {
+    font-size: 10.5px;
+    background: rgba(255,180,84,0.2);
+    color: var(--warn);
+    padding: 2px 7px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+  .candidate-list { display: flex; flex-direction: column; gap: 6px; }
+  .candidate-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 10px;
+    background: #12121a;
+    border: 2px solid transparent;
+    cursor: pointer;
+  }
+  .candidate-row.selected {
+    border-color: var(--accent);
+    background: rgba(255,59,59,0.08);
+  }
+  .candidate-row.excluded {
+    opacity: 0.35;
+  }
+  .candidate-row img {
+    width: 50px; height: 38px; object-fit: cover; border-radius: 6px; flex-shrink: 0;
     background: #222;
   }
-  .song-info { flex: 1; min-width: 0; }
-  .song-title { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .song-channel { font-size: 11.5px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .song-status { font-size: 11px; flex-shrink: 0; }
-  .status-ok { color: var(--success); }
-  .status-searching { color: var(--sub); }
-  .status-none { color: #d9534f; }
-  .toggle-check {
-    width: 22px; height: 22px; border-radius: 6px;
+  .candidate-info { flex: 1; min-width: 0; }
+  .candidate-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .candidate-channel { font-size: 11px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+  .official-badge {
+    font-size: 9.5px;
+    background: rgba(61,220,132,0.2);
+    color: var(--success);
+    padding: 1px 5px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .radio-dot {
+    width: 18px; height: 18px; border-radius: 50%;
     border: 2px solid var(--border);
     flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 14px;
   }
-  .toggle-check.checked {
+  .radio-dot.on { border-color: var(--accent); }
+  .radio-dot.on::after {
+    content: '';
+    width: 9px; height: 9px; border-radius: 50%;
     background: var(--accent);
-    border-color: var(--accent);
   }
+  .status-none { color: #d9534f; font-size: 12px; padding: 6px 0; }
+  .status-searching { color: var(--sub); font-size: 12px; display: flex; align-items: center; gap: 6px; padding: 6px 0; }
+
   .progress-text { font-size: 12px; color: var(--sub); margin-top: 8px; text-align: center; }
   .result-box {
     background: #12121a;
@@ -149,7 +208,7 @@
   .row-buttons { display: flex; gap: 10px; }
   .row-buttons button { flex: 1; }
   .spinner {
-    width: 16px; height: 16px;
+    width: 14px; height: 14px;
     border: 2px solid var(--border);
     border-top-color: var(--accent);
     border-radius: 50%;
@@ -158,6 +217,32 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   .footer-note { font-size: 11px; color: var(--sub); text-align: center; margin-top: 24px; line-height: 1.6; }
+
+  .mode-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
+  .mode-toggle button { flex: 1; }
+
+  .order-list { display: flex; flex-direction: column; gap: 6px; }
+  .order-row {
+    display: flex; align-items: center; gap: 10px;
+    background: #12121a; border-radius: 10px; padding: 8px;
+  }
+  .order-row img { width: 44px; height: 34px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+  .order-row .order-title { font-size: 12.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .order-arrows { display: flex; gap: 4px; flex-shrink: 0; }
+  .order-arrows button {
+    padding: 4px 8px; font-size: 12px; border-radius: 6px;
+  }
+
+  select {
+    width: 100%;
+    background: #12121a;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 12px;
+    font-size: 14px;
+    font-family: inherit;
+  }
 </style>
 </head>
 <body>
@@ -179,6 +264,7 @@
         <div class="email" id="userEmail"></div>
       </div>
     </div>
+    <div class="quota-note" id="quotaNote"></div>
   </div>
 </div>
 
@@ -193,14 +279,33 @@
 <!-- 検索結果カード -->
 <div class="card hidden" id="resultsCard">
   <h2>3. 曲を確認・選択</h2>
+  <div id="dupWarn" class="warn-box hidden"></div>
   <div id="progressText" class="progress-text hidden"></div>
   <div id="songList"></div>
   <div style="height:14px"></div>
+
+  <div class="mode-toggle">
+    <button class="btn-small active" id="modeNew">新規プレイリスト</button>
+    <button class="btn-small" id="modeExisting">既存に追加</button>
+  </div>
   <input type="text" id="playlistName" placeholder="プレイリスト名（例: 2026年7月のお気に入り）">
+  <select id="existingSelect" class="hidden"></select>
+
   <div style="height:12px"></div>
   <div class="row-buttons">
     <button class="btn-secondary" id="backBtn">戻る</button>
     <button class="btn-primary" id="createBtn">プレイリストを作成</button>
+  </div>
+</div>
+
+<!-- 並び替えカード -->
+<div class="card hidden" id="orderCard">
+  <h2>4. 曲順を確認</h2>
+  <div class="order-list" id="orderList"></div>
+  <div style="height:14px"></div>
+  <div class="row-buttons">
+    <button class="btn-secondary" id="orderBackBtn">戻る</button>
+    <button class="btn-primary" id="orderConfirmBtn">この順番で追加</button>
   </div>
 </div>
 
@@ -227,7 +332,11 @@ const SCOPES = "https://www.googleapis.com/auth/youtube";
 
 let accessToken = null;
 let tokenClient = null;
-let searchResults = []; // {query, videoId, title, channel, thumb, status, selected}
+let songs = []; // {query, candidates: [...], selectedIndex, status, isDup}
+let quotaUsed = 0; // 目安（search=100, playlists.insert=50, playlistItems.insert=50）
+let addMode = 'new'; // 'new' | 'existing'
+let userPlaylists = [];
+let finalOrder = []; // 並び替え後の曲配列
 
 const els = {
   loginBtn: document.getElementById('loginBtn'),
@@ -236,20 +345,40 @@ const els = {
   userPhoto: document.getElementById('userPhoto'),
   userName: document.getElementById('userName'),
   userEmail: document.getElementById('userEmail'),
+  quotaNote: document.getElementById('quotaNote'),
   inputCard: document.getElementById('inputCard'),
   songInput: document.getElementById('songInput'),
   searchBtn: document.getElementById('searchBtn'),
   resultsCard: document.getElementById('resultsCard'),
+  dupWarn: document.getElementById('dupWarn'),
   songList: document.getElementById('songList'),
   progressText: document.getElementById('progressText'),
+  modeNew: document.getElementById('modeNew'),
+  modeExisting: document.getElementById('modeExisting'),
   playlistName: document.getElementById('playlistName'),
+  existingSelect: document.getElementById('existingSelect'),
   backBtn: document.getElementById('backBtn'),
   createBtn: document.getElementById('createBtn'),
+  orderCard: document.getElementById('orderCard'),
+  orderList: document.getElementById('orderList'),
+  orderBackBtn: document.getElementById('orderBackBtn'),
+  orderConfirmBtn: document.getElementById('orderConfirmBtn'),
   doneCard: document.getElementById('doneCard'),
   doneCount: document.getElementById('doneCount'),
   playlistLink: document.getElementById('playlistLink'),
   anotherBtn: document.getElementById('anotherBtn'),
 };
+
+function updateQuotaNote() {
+  els.quotaNote.textContent = `本日の目安使用量: 約${quotaUsed} / 10,000 ユニット`;
+}
+
+function decodeHtmlEntities(str) {
+  if (!str) return '';
+  const el = document.createElement('textarea');
+  el.innerHTML = str;
+  return el.value;
+}
 
 function initGoogleAuth() {
   tokenClient = google.accounts.oauth2.initTokenClient({
@@ -261,8 +390,6 @@ function initGoogleAuth() {
         return;
       }
       accessToken = resp.access_token;
-      localStorage.setItem('pf_token', accessToken);
-      localStorage.setItem('pf_token_time', Date.now().toString());
       await fetchUserInfo();
     }
   });
@@ -280,6 +407,7 @@ async function fetchUserInfo() {
     els.loginArea.classList.add('hidden');
     els.userArea.classList.remove('hidden');
     els.inputCard.classList.remove('hidden');
+    updateQuotaNote();
   } catch (e) {
     console.error(e);
   }
@@ -289,7 +417,7 @@ els.loginBtn.addEventListener('click', () => {
   tokenClient.requestAccessToken();
 });
 
-// 曲リストパース → 検索
+// ===== 曲リストパース → 重複検知 → 検索 =====
 els.searchBtn.addEventListener('click', async () => {
   const raw = els.songInput.value.trim();
   if (!raw) { alert('曲名を入力してねぇ'); return; }
@@ -299,41 +427,96 @@ els.searchBtn.addEventListener('click', async () => {
     if (!confirm(lines.length + '曲あるけど、YouTube APIのクォータ的に一度に多いと厳しいかも。続ける？')) return;
   }
 
-  searchResults = lines.map(q => ({ query: q, videoId: null, title: '', channel: '', thumb: '', status: 'searching', selected: true }));
+  // 重複チェック（正規化して比較）
+  const normalize = s => s.toLowerCase().replace(/[\s\-‐–—・~〜'’"”「」『』()（）]/g, '');
+  const seen = {};
+  const dupQueries = new Set();
+  lines.forEach(l => {
+    const n = normalize(l);
+    if (seen[n]) dupQueries.add(l);
+    seen[n] = true;
+  });
+
+  songs = lines.map(q => ({
+    query: q,
+    candidates: [],
+    selectedIndex: 0,
+    status: 'searching',
+    isDup: dupQueries.has(q)
+  }));
+
   els.inputCard.classList.add('hidden');
   els.resultsCard.classList.remove('hidden');
+
+  if (dupQueries.size > 0) {
+    els.dupWarn.classList.remove('hidden');
+    els.dupWarn.textContent = `⚠ 重複してそうな曲が${dupQueries.size}件あるよ。リストの内容を確認してみてね`;
+  } else {
+    els.dupWarn.classList.add('hidden');
+  }
+
   renderSongList();
 
   els.progressText.classList.remove('hidden');
-  for (let i = 0; i < searchResults.length; i++) {
-    els.progressText.textContent = `検索中... (${i + 1}/${searchResults.length})`;
+  for (let i = 0; i < songs.length; i++) {
+    els.progressText.textContent = `検索中... (${i + 1}/${songs.length})`;
     await searchOneSong(i);
     renderSongList();
   }
   els.progressText.classList.add('hidden');
+  updateQuotaNote();
 });
 
+// 公式らしさスコアリング
+function officialScore(snippet) {
+  const channel = (snippet.channelTitle || '').toLowerCase();
+  const title = (snippet.title || '').toLowerCase();
+  let score = 0;
+  if (channel.includes('- topic')) score += 100; // YouTube自動生成トピックチャンネル(ほぼ公式音源)
+  if (channel.includes('official')) score += 60;
+  if (title.includes('official')) score += 30;
+  if (title.includes('mv') || title.includes('music video')) score += 15;
+  if (channel.includes('vevo')) score += 60;
+  if (title.includes('cover') || channel.includes('cover')) score -= 60;
+  if (title.includes('歌ってみた')) score -= 60;
+  if (title.includes('弾いてみた')) score -= 50;
+  if (title.includes('practice') || title.includes('弾き語り')) score -= 30;
+  if (title.includes('live') || title.includes('ライブ')) score -= 10;
+  return score;
+}
+function isOfficialish(snippet) {
+  return officialScore(snippet) >= 30;
+}
+
 async function searchOneSong(index) {
-  const item = searchResults[index];
+  const item = songs[index];
   try {
     const url = new URL('https://www.googleapis.com/youtube/v3/search');
     url.searchParams.set('part', 'snippet');
     url.searchParams.set('q', item.query + ' 音楽');
     url.searchParams.set('type', 'video');
     url.searchParams.set('videoCategoryId', '10');
-    url.searchParams.set('maxResults', '1');
+    url.searchParams.set('maxResults', '5');
     const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+    quotaUsed += 100;
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData?.error?.message || res.status);
     }
     const data = await res.json();
     if (data.items && data.items.length > 0) {
-      const v = data.items[0];
-      item.videoId = v.id.videoId;
-      item.title = v.snippet.title;
-      item.channel = v.snippet.channelTitle;
-      item.thumb = v.snippet.thumbnails?.default?.url || '';
+      const scored = data.items.map(v => ({
+        videoId: v.id.videoId,
+        title: decodeHtmlEntities(v.snippet.title),
+        channel: v.snippet.channelTitle,
+        thumb: v.snippet.thumbnails?.default?.url || '',
+        score: officialScore(v.snippet),
+        official: isOfficialish(v.snippet)
+      }));
+      // スコア順に並び替え（公式っぽいものを上に）
+      scored.sort((a, b) => b.score - a.score);
+      item.candidates = scored.slice(0, 3);
+      item.selectedIndex = 0;
       item.status = 'ok';
     } else {
       item.status = 'none';
@@ -344,62 +527,100 @@ async function searchOneSong(index) {
   }
 }
 
-function decodeHtmlEntities(str) {
-  if (!str) return '';
-  const el = document.createElement('textarea');
-  el.innerHTML = str;
-  return el.value;
-}
-
 function renderSongList() {
   els.songList.innerHTML = '';
-  searchResults.forEach((item, i) => {
-    const row = document.createElement('div');
-    row.className = 'song-row';
+  songs.forEach((item, i) => {
+    const block = document.createElement('div');
+    block.className = 'song-block';
 
-    const check = document.createElement('div');
-    check.className = 'toggle-check' + (item.selected && item.status === 'ok' ? ' checked' : '');
-    if (item.status === 'ok') {
-      check.textContent = item.selected ? '✓' : '';
-      check.style.cursor = 'pointer';
-      check.addEventListener('click', () => {
-        item.selected = !item.selected;
+    const header = document.createElement('div');
+    header.className = 'song-block-header';
+    const q = document.createElement('div');
+    q.className = 'song-query';
+    q.textContent = item.query;
+    header.appendChild(q);
+    if (item.isDup) {
+      const badge = document.createElement('span');
+      badge.className = 'dup-badge';
+      badge.textContent = '重複注意';
+      header.appendChild(badge);
+    }
+    block.appendChild(header);
+
+    if (item.status === 'searching') {
+      const s = document.createElement('div');
+      s.className = 'status-searching';
+      s.innerHTML = '<span class="spinner"></span> 検索中...';
+      block.appendChild(s);
+    } else if (item.status === 'none') {
+      const s = document.createElement('div');
+      s.className = 'status-none';
+      s.textContent = '✗ 見つからなかった';
+      block.appendChild(s);
+    } else {
+      const list = document.createElement('div');
+      list.className = 'candidate-list';
+      item.candidates.forEach((c, ci) => {
+        const row = document.createElement('div');
+        row.className = 'candidate-row' + (ci === item.selectedIndex ? ' selected' : '');
+        row.addEventListener('click', () => {
+          item.selectedIndex = ci;
+          renderSongList();
+        });
+
+        const dot = document.createElement('div');
+        dot.className = 'radio-dot' + (ci === item.selectedIndex ? ' on' : '');
+
+        const img = document.createElement('img');
+        img.src = c.thumb;
+        img.alt = '';
+
+        const info = document.createElement('div');
+        info.className = 'candidate-info';
+        const title = document.createElement('div');
+        title.className = 'candidate-title';
+        title.textContent = c.title;
+        const ch = document.createElement('div');
+        ch.className = 'candidate-channel';
+        ch.textContent = c.channel;
+        if (c.official) {
+          const ob = document.createElement('span');
+          ob.className = 'official-badge';
+          ob.textContent = '公式っぽい';
+          ch.appendChild(ob);
+        }
+        info.appendChild(title);
+        info.appendChild(ch);
+
+        row.appendChild(dot);
+        row.appendChild(img);
+        row.appendChild(info);
+        list.appendChild(row);
+      });
+
+      // 除外オプション
+      const excludeRow = document.createElement('div');
+      excludeRow.className = 'candidate-row' + (item.selectedIndex === -1 ? ' selected' : '') + (item.selectedIndex === -1 ? '' : '');
+      excludeRow.style.justifyContent = 'center';
+      excludeRow.style.padding = '6px';
+      excludeRow.addEventListener('click', () => {
+        item.selectedIndex = -1;
         renderSongList();
       });
-    } else {
-      check.style.opacity = '0.3';
+      const excludeDot = document.createElement('div');
+      excludeDot.className = 'radio-dot' + (item.selectedIndex === -1 ? ' on' : '');
+      const excludeLabel = document.createElement('div');
+      excludeLabel.style.fontSize = '12px';
+      excludeLabel.style.color = 'var(--sub)';
+      excludeLabel.textContent = 'この曲は追加しない';
+      excludeRow.appendChild(excludeDot);
+      excludeRow.appendChild(excludeLabel);
+      list.appendChild(excludeRow);
+
+      block.appendChild(list);
     }
 
-    const img = document.createElement('img');
-    img.src = item.thumb || '';
-    img.alt = '';
-
-    const info = document.createElement('div');
-    info.className = 'song-info';
-    const title = document.createElement('div');
-    title.className = 'song-title';
-    title.textContent = item.status === 'ok' ? decodeHtmlEntities(item.title) : item.query;
-    const channel = document.createElement('div');
-    channel.className = 'song-channel';
-    channel.textContent = item.status === 'ok' ? item.channel : (item.status === 'searching' ? '検索中...' : '見つからなかった');
-    info.appendChild(title);
-    info.appendChild(channel);
-
-    const status = document.createElement('div');
-    status.className = 'song-status ' + (item.status === 'ok' ? 'status-ok' : item.status === 'searching' ? 'status-searching' : 'status-none');
-    if (item.status === 'searching') {
-      status.innerHTML = '<span class="spinner"></span>';
-    } else if (item.status === 'ok') {
-      status.textContent = '✓';
-    } else {
-      status.textContent = '✗';
-    }
-
-    row.appendChild(check);
-    row.appendChild(img);
-    row.appendChild(info);
-    row.appendChild(status);
-    els.songList.appendChild(row);
+    els.songList.appendChild(block);
   });
 }
 
@@ -408,42 +629,153 @@ els.backBtn.addEventListener('click', () => {
   els.inputCard.classList.remove('hidden');
 });
 
-els.createBtn.addEventListener('click', async () => {
-  const selected = searchResults.filter(s => s.status === 'ok' && s.selected);
+// ===== モード切替（新規 / 既存プレイリスト） =====
+els.modeNew.addEventListener('click', () => {
+  addMode = 'new';
+  els.modeNew.classList.add('active');
+  els.modeExisting.classList.remove('active');
+  els.playlistName.classList.remove('hidden');
+  els.existingSelect.classList.add('hidden');
+});
+
+els.modeExisting.addEventListener('click', async () => {
+  addMode = 'existing';
+  els.modeExisting.classList.add('active');
+  els.modeNew.classList.remove('active');
+  els.playlistName.classList.add('hidden');
+  els.existingSelect.classList.remove('hidden');
+  await loadUserPlaylists();
+});
+
+async function loadUserPlaylists() {
+  els.existingSelect.innerHTML = '<option>読み込み中...</option>';
+  try {
+    const url = new URL('https://www.googleapis.com/youtube/v3/playlists');
+    url.searchParams.set('part', 'snippet');
+    url.searchParams.set('mine', 'true');
+    url.searchParams.set('maxResults', '50');
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+    quotaUsed += 1;
+    updateQuotaNote();
+    const data = await res.json();
+    userPlaylists = data.items || [];
+    if (userPlaylists.length === 0) {
+      els.existingSelect.innerHTML = '<option value="">プレイリストが見つからないよ</option>';
+    } else {
+      els.existingSelect.innerHTML = userPlaylists.map(p =>
+        `<option value="${p.id}">${decodeHtmlEntities(p.snippet.title)}</option>`
+      ).join('');
+    }
+  } catch (e) {
+    console.error(e);
+    els.existingSelect.innerHTML = '<option value="">読み込みエラー</option>';
+  }
+}
+
+// ===== 「プレイリストを作成」→ まず並び替え画面へ =====
+els.createBtn.addEventListener('click', () => {
+  const selected = songs.filter(s => s.status === 'ok' && s.selectedIndex !== -1);
   if (selected.length === 0) {
     alert('プレイリストに追加できる曲がないよ');
     return;
   }
-  const name = els.playlistName.value.trim() || ('Playlist Forge ' + new Date().toLocaleDateString('ja-JP'));
+  if (addMode === 'existing' && !els.existingSelect.value) {
+    alert('追加先のプレイリストを選んでねぇ');
+    return;
+  }
 
-  els.createBtn.disabled = true;
-  els.createBtn.textContent = '作成中...';
+  finalOrder = selected.map(s => ({
+    query: s.query,
+    ...s.candidates[s.selectedIndex]
+  }));
+
+  els.resultsCard.classList.add('hidden');
+  els.orderCard.classList.remove('hidden');
+  renderOrderList();
+});
+
+function renderOrderList() {
+  els.orderList.innerHTML = '';
+  finalOrder.forEach((item, i) => {
+    const row = document.createElement('div');
+    row.className = 'order-row';
+
+    const img = document.createElement('img');
+    img.src = item.thumb;
+    img.alt = '';
+
+    const title = document.createElement('div');
+    title.className = 'order-title';
+    title.textContent = item.title;
+
+    const arrows = document.createElement('div');
+    arrows.className = 'order-arrows';
+    const upBtn = document.createElement('button');
+    upBtn.className = 'btn-small';
+    upBtn.textContent = '↑';
+    upBtn.disabled = i === 0;
+    upBtn.addEventListener('click', () => {
+      [finalOrder[i - 1], finalOrder[i]] = [finalOrder[i], finalOrder[i - 1]];
+      renderOrderList();
+    });
+    const downBtn = document.createElement('button');
+    downBtn.className = 'btn-small';
+    downBtn.textContent = '↓';
+    downBtn.disabled = i === finalOrder.length - 1;
+    downBtn.addEventListener('click', () => {
+      [finalOrder[i + 1], finalOrder[i]] = [finalOrder[i], finalOrder[i + 1]];
+      renderOrderList();
+    });
+    arrows.appendChild(upBtn);
+    arrows.appendChild(downBtn);
+
+    row.appendChild(img);
+    row.appendChild(title);
+    row.appendChild(arrows);
+    els.orderList.appendChild(row);
+  });
+}
+
+els.orderBackBtn.addEventListener('click', () => {
+  els.orderCard.classList.add('hidden');
+  els.resultsCard.classList.remove('hidden');
+});
+
+// ===== 実際にプレイリスト作成/追加を実行 =====
+els.orderConfirmBtn.addEventListener('click', async () => {
+  els.orderConfirmBtn.disabled = true;
+  els.orderConfirmBtn.textContent = '作成中...';
 
   try {
-    // プレイリスト作成
-    const createRes = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + accessToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        snippet: { title: name, description: 'Playlist Forgeで作成' },
-        status: { privacyStatus: 'private' }
-      })
-    });
-    if (!createRes.ok) {
-      const err = await createRes.json().catch(() => ({}));
-      throw new Error(err?.error?.message || 'プレイリスト作成失敗');
+    let playlistId;
+    if (addMode === 'existing') {
+      playlistId = els.existingSelect.value;
+    } else {
+      const name = els.playlistName.value.trim() || ('Playlist Forge ' + new Date().toLocaleDateString('ja-JP'));
+      const createRes = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + accessToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          snippet: { title: name, description: 'Playlist Forgeで作成' },
+          status: { privacyStatus: 'private' }
+        })
+      });
+      quotaUsed += 50;
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}));
+        throw new Error(err?.error?.message || 'プレイリスト作成失敗');
+      }
+      const playlistData = await createRes.json();
+      playlistId = playlistData.id;
     }
-    const playlistData = await createRes.json();
-    const playlistId = playlistData.id;
 
-    // 曲を順番に追加
     let successCount = 0;
-    for (let i = 0; i < selected.length; i++) {
-      els.createBtn.textContent = `追加中 (${i + 1}/${selected.length})`;
-      const item = selected[i];
+    for (let i = 0; i < finalOrder.length; i++) {
+      els.orderConfirmBtn.textContent = `追加中 (${i + 1}/${finalOrder.length})`;
+      const item = finalOrder[i];
       try {
         const addRes = await fetch('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', {
           method: 'POST',
@@ -458,32 +790,40 @@ els.createBtn.addEventListener('click', async () => {
             }
           })
         });
+        quotaUsed += 50;
         if (addRes.ok) successCount++;
       } catch (e) {
         console.error('add error', item.query, e);
       }
     }
 
-    els.resultsCard.classList.add('hidden');
+    els.orderCard.classList.add('hidden');
     els.doneCard.classList.remove('hidden');
-    els.doneCount.textContent = `${successCount} / ${selected.length} 曲を追加したよ`;
+    els.doneCount.textContent = `${successCount} / ${finalOrder.length} 曲を追加したよ`;
     els.playlistLink.href = `https://music.youtube.com/playlist?list=${playlistId}`;
+    updateQuotaNote();
 
   } catch (e) {
     console.error(e);
     alert('エラーが起きたよ: ' + e.message);
   } finally {
-    els.createBtn.disabled = false;
-    els.createBtn.textContent = 'プレイリストを作成';
+    els.orderConfirmBtn.disabled = false;
+    els.orderConfirmBtn.textContent = 'この順番で追加';
   }
 });
 
 els.anotherBtn.addEventListener('click', () => {
-  searchResults = [];
+  songs = [];
+  finalOrder = [];
   els.songInput.value = '';
   els.playlistName.value = '';
   els.doneCard.classList.add('hidden');
   els.inputCard.classList.remove('hidden');
+  addMode = 'new';
+  els.modeNew.classList.add('active');
+  els.modeExisting.classList.remove('active');
+  els.playlistName.classList.remove('hidden');
+  els.existingSelect.classList.add('hidden');
 });
 
 // 起動時: Google Identity Services準備を待つ
