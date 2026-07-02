@@ -723,19 +723,33 @@ ${list}
   }
 }
 
+// 全角記号・半角記号を統一し、判定に不要な記号を幅広く除去する
+function normalizeForMatch(str) {
+  return str
+    .toLowerCase()
+    // 全角英数記号を半角に変換
+    .replace(/[！-～]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+    // 曲名によくある装飾記号・約物をまとめてスペースに置換
+    .replace(/[「」『』（）()・\-–—~〜'’"”,、。!！?？☆★♪♫#＃/／:：;；.]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // 検索クエリ(曲名・アーティスト名)が、候補のタイトルに全く含まれていないかチェックする
 // 「公式チャンネルだけど全然関係ない曲がヒットしてる」パターン(RIDEBACK問題)を検出するため
 function looksUnrelatedToQuery(query, candidateTitle) {
-  // クエリを単語に分割(記号・スペースで区切り、2文字未満の短すぎる単語は判定から除外)
-  const words = query
-    .toLowerCase()
-    .replace(/[「」『』（）()・\-–—~〜'’"”,、。]/g, ' ')
+  const normalizedQuery = normalizeForMatch(query);
+  const normalizedTitle = normalizeForMatch(candidateTitle);
+
+  // 記号を落とした後、スペース区切り＋英数字/日本語の境界でも分割して単語化
+  // (「motto派手にね」のような記号なし連結語も、ある程度の粒度で拾えるようにする)
+  const rawWords = normalizedQuery
     .split(/\s+/)
-    .filter(w => w.length >= 2);
+    .flatMap(w => w.split(/(?<=[a-z0-9])(?=[^\x00-\x7f])|(?<=[^\x00-\x7f])(?=[a-z0-9])/));
+  const words = rawWords.filter(w => w.length >= 2);
   if (words.length === 0) return false; // 判定できない場合は「無関係」とはみなさない
 
-  const titleLower = candidateTitle.toLowerCase();
-  const matchCount = words.filter(w => titleLower.includes(w)).length;
+  const matchCount = words.filter(w => normalizedTitle.includes(w)).length;
   // クエリの単語のうち、タイトルに1つも一致しなければ「無関係の可能性が高い」と判定
   return matchCount === 0;
 }
