@@ -611,6 +611,7 @@ const DEFINITELY_NOT_OFFICIAL = [
   'ピアノ楽譜', '楽譜あり', 'ピアノソロ', 'ピアノアレンジ', 'ピアノ', 'midi',
   'ai で', 'aiで', 'aiアレンジ', 'ai cover',
   '歌枠', '切り抜き', 'すたぽら', '歌枠切り抜き', '弾いてみました',
+  'マッシュアップ', 'mashup', '歌い方', '解説', 'ボイストレーナー',
 ];
 
 // 「オリジナルとは歌い手やアレンジが違うバージョン」を示すことが多いキーワード
@@ -662,6 +663,7 @@ function hasProvidedToYoutubeSignal(snippet) {
 function isTopTierOfficial(snippet) {
   if (hasDefinitelyNotOfficialSignal(snippet)) return false; // カバー確定なら問答無用で対象外
   if (hasVersionMismatchSignal(snippet)) return false; // 歌手違い・リミックス版らしきものも対象外
+  if (hasShortVersionSignal(snippet)) return false; // 短縮版・TVサイズも対象外
   const channel = (snippet.channelTitle || '').toLowerCase();
   if (hasProvidedToYoutubeSignal(snippet)) return true; // Content ID経由の正規配信は最優先で信頼する
   if (channel.includes('- topic')) return true; // YouTube自動生成トピックチャンネル(公式音源のみが対象)
@@ -832,31 +834,27 @@ async function searchOneSong(index) {
           official: isOfficialish(v.snippet),
           definitelyNotOfficial: hasDefinitelyNotOfficialSignal(v.snippet),
           titleMismatch: looksUnrelatedToQuery(item.query, decodeHtmlEntities(v.snippet.title)),
-          versionMismatch: hasVersionMismatchSignal(v.snippet)
+          versionMismatch: hasVersionMismatchSignal(v.snippet),
+          shortVersion: hasShortVersionSignal(v.snippet)
         }));
       // スコア順に並び替え（公式っぽいものを上に）
       scored.sort((a, b) => b.score - a.score);
 
-      // 公式候補(ルールで確実に公式と判定できたもの)が1件でもあれば、
-      // それ以外の候補は思い切って全部間引く(Lia版・花澤香菜版のように、
-      // 明示的な「Cover」表記が無くても実質カバーな動画を混ぜ込ませないため)
-      // ただし、公式チャンネルでもタイトルが検索クエリと無関係(titleMismatch)なら
-      // 「別の曲がヒットしてるだけ」とみなして公式候補から除外する(RIDEBACK問題対策)
+      // 公式チャンネル(-Topic, VEVO, レコード会社等)かつ曲名も一致してる候補だけを採用するよ。
+      // これが0件の場合、非公式動画をフォールバックとして絶対に出さない
+      // (「歌い方解説」「マッシュアップ」等、キーワードリストに載ってないカバー系動画が
+      //  紛れ込むのを防ぐため。キーワードを無限に追加するより、公式候補が無ければ
+      //  素直に「見つからなかった」と言う方が安全、という判断だよ)
       const officialOnly = scored.filter(c => c.official && !c.titleMismatch);
-      const filtered = officialOnly.length > 0 ? officialOnly : scored;
 
-      item.candidates = filtered.slice(0, 5);
-
-      // 公式候補がゼロ件で、かつ残った候補も全部「カバー確定」「無関係」「バージョン違い」なら、
-      // 実質的に「見つからなかった」扱いにする(誤検索の紛れ込みを避けるため)
-      const allUnusable = item.candidates.length > 0 &&
-        item.candidates.every(c => c.definitelyNotOfficial || c.titleMismatch || c.versionMismatch);
-      if (officialOnly.length === 0 && allUnusable) {
+      if (officialOnly.length === 0) {
         item.candidates = [];
         item.status = 'none';
-        item.noOfficialFound = true; // UIで「候補が見つからなかった(全部非公式)」と案内するためのフラグ
+        item.noOfficialFound = true; // UIで「候補が見つからなかった(公式が無かった)」と案内するためのフラグ
         return;
       }
+
+      item.candidates = officialOnly.slice(0, 5);
 
       // AI判定(Gemini APIキーが設定されていれば追加で並び替えの参考にする)
       const aiOrder = await askGeminiForOfficialRanking(item.query, item.candidates);
@@ -978,6 +976,12 @@ function renderSongList() {
           vb.className = 'dup-badge';
           vb.textContent = '⚠別バージョンかも';
           ch.appendChild(vb);
+        }
+        if (c.shortVersion) {
+          const sb = document.createElement('span');
+          sb.className = 'dup-badge';
+          sb.textContent = '⚠短縮版かも';
+          ch.appendChild(sb);
         }
         info.appendChild(title);
         info.appendChild(ch);
