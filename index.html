@@ -363,10 +363,19 @@ let addMode = 'new'; // 'new' | 'existing'
 let userPlaylists = [];
 let finalOrder = []; // 並び替え後の曲配列
 
-// ===== クォータ管理(日付ベース・localStorageで永続化) =====
+// ===== クォータ管理(太平洋時間ベース・localStorageで永続化) =====
+// Google側の実際のクォータリセットは太平洋時間(PT)の深夜0時に行われるから、
+// ツール内の表示もそれに合わせるよ。日本時間の日付だとズレてしまうため、
+// Intl.DateTimeFormatで太平洋時間の日付を取得してキーにするよ
 function todayKey() {
-  const d = new Date();
-  return `pf_quota_${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric', month: 'numeric', day: 'numeric'
+  }).formatToParts(new Date());
+  const y = parts.find(p => p.type === 'year').value;
+  const m = parts.find(p => p.type === 'month').value;
+  const d = parts.find(p => p.type === 'day').value;
+  return `pf_quota_${y}-${m}-${d}`;
 }
 function getQuotaUsed() {
   const v = localStorage.getItem(todayKey());
@@ -415,7 +424,7 @@ const els = {
 };
 
 function updateQuotaNote() {
-  els.quotaNote.textContent = `本日の目安使用量: 約${getQuotaUsed()} / 10,000 ユニット`;
+  els.quotaNote.textContent = `本日の目安使用量(PT基準): 約${getQuotaUsed()} / 10,000 ユニット`;
 }
 
 function maskKey(key) {
