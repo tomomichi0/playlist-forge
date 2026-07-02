@@ -268,6 +268,24 @@
   </div>
 </div>
 
+<!-- AI判定設定カード -->
+<div class="card hidden" id="aiSettingsCard">
+  <h2>
+    AI判定（任意）
+    <span id="aiStatusBadge" class="official-badge" style="font-size:10.5px;">未設定</span>
+  </h2>
+  <div style="font-size:12px; color:var(--sub); margin-bottom:10px; line-height:1.6;">
+    Gemini APIキーを入れると、公式音源かどうかをAIが追加で判定してくれるよ。<br>
+    キーはこの端末のブラウザだけに保存されて、GitHub側には一切送られないよ。
+  </div>
+  <input type="text" id="geminiKeyInput" placeholder="Gemini APIキー（AQ.から始まる文字列）">
+  <div style="height:10px"></div>
+  <div class="row-buttons">
+    <button class="btn-secondary" id="geminiKeyClearBtn">キーを削除</button>
+    <button class="btn-primary" id="geminiKeySaveBtn">保存する</button>
+  </div>
+</div>
+
 <!-- 曲入力カード -->
 <div class="card hidden" id="inputCard">
   <h2>2. 曲名リストを貼り付け</h2>
@@ -329,6 +347,14 @@
 <script>
 const CLIENT_ID = "1244880388-sl1ijkj4urp7lpu25hc08ajcq8u9qp8t.apps.googleusercontent.com";
 const SCOPES = "https://www.googleapis.com/auth/youtube";
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
+function getGeminiApiKey() {
+  return localStorage.getItem('pf_gemini_key') || '';
+}
+function setGeminiApiKey(key) {
+  if (key) localStorage.setItem('pf_gemini_key', key);
+  else localStorage.removeItem('pf_gemini_key');
+}
 
 let accessToken = null;
 let tokenClient = null;
@@ -360,6 +386,11 @@ const els = {
   userName: document.getElementById('userName'),
   userEmail: document.getElementById('userEmail'),
   quotaNote: document.getElementById('quotaNote'),
+  aiSettingsCard: document.getElementById('aiSettingsCard'),
+  aiStatusBadge: document.getElementById('aiStatusBadge'),
+  geminiKeyInput: document.getElementById('geminiKeyInput'),
+  geminiKeyClearBtn: document.getElementById('geminiKeyClearBtn'),
+  geminiKeySaveBtn: document.getElementById('geminiKeySaveBtn'),
   inputCard: document.getElementById('inputCard'),
   songInput: document.getElementById('songInput'),
   searchBtn: document.getElementById('searchBtn'),
@@ -386,6 +417,33 @@ const els = {
 function updateQuotaNote() {
   els.quotaNote.textContent = `本日の目安使用量: 約${getQuotaUsed()} / 10,000 ユニット`;
 }
+
+function refreshAiStatusBadge() {
+  const key = getGeminiApiKey();
+  if (key) {
+    els.aiStatusBadge.textContent = '設定済み・AI判定ON';
+    els.aiStatusBadge.style.color = 'var(--success)';
+    els.geminiKeyInput.value = key;
+  } else {
+    els.aiStatusBadge.textContent = '未設定（ルールのみ）';
+    els.aiStatusBadge.style.color = 'var(--sub)';
+    els.geminiKeyInput.value = '';
+  }
+}
+
+els.geminiKeySaveBtn.addEventListener('click', () => {
+  const v = els.geminiKeyInput.value.trim();
+  if (!v) { alert('キーを入力してねぇ'); return; }
+  setGeminiApiKey(v);
+  refreshAiStatusBadge();
+  alert('保存したよ！次回の検索からAI判定が有効になるよ');
+});
+
+els.geminiKeyClearBtn.addEventListener('click', () => {
+  if (!confirm('保存してあるAPIキーを削除する？')) return;
+  setGeminiApiKey('');
+  refreshAiStatusBadge();
+});
 
 function decodeHtmlEntities(str) {
   if (!str) return '';
@@ -420,8 +478,10 @@ async function fetchUserInfo() {
     els.userEmail.textContent = data.email || '';
     els.loginArea.classList.add('hidden');
     els.userArea.classList.remove('hidden');
+    els.aiSettingsCard.classList.remove('hidden');
     els.inputCard.classList.remove('hidden');
     updateQuotaNote();
+    refreshAiStatusBadge();
   } catch (e) {
     console.error(e);
   }
@@ -518,6 +578,12 @@ const RECORD_LABELS = [
   'nippon columbia', '日本コロムビア',
 ];
 
+// アーティスト本人・作曲者本人が直接運用している非レーベル系の公式チャンネル名
+// (レコード会社名を名乗らないタイプの「本物」チャンネルをここに追加していく)
+const ARTIST_OFFICIAL_CHANNELS = [
+  'spcl ryo', // supercell主宰ryo氏の公式チャンネル
+];
+
 // タイトル・チャンネル名に入っていたら「カバー・二次創作が確定」とみなすキーワード
 // これに該当したら、公式最優先階層(Official等)であっても強制的に弾く
 const DEFINITELY_NOT_OFFICIAL = [
@@ -527,7 +593,7 @@ const DEFINITELY_NOT_OFFICIAL = [
   'off vocal', 'オフボーカル', '歌唱', '仮歌', 'モノマネ', 'ものまね',
   'ボーカル講師', 'ボイトレ', 'アカペラ', 'acapella',
   'remix by', 'session', 'セッション',
-  'ピアノ楽譜', '楽譜あり', 'ピアノソロ', 'ピアノアレンジ',
+  'ピアノ楽譜', '楽譜あり', 'ピアノソロ', 'ピアノアレンジ', 'midi',
   'ai で', 'aiで', 'aiアレンジ', 'ai cover',
 ];
 
@@ -547,6 +613,7 @@ function isTopTierOfficial(snippet) {
   if (channel.includes('vevo')) return true;
   if (channel.endsWith('official') || channel.includes(' official') || channel.includes('official ')) return true;
   if (RECORD_LABELS.some(label => channel.includes(label))) return true;
+  if (ARTIST_OFFICIAL_CHANNELS.some(name => channel === name || channel.includes(name))) return true;
   return false;
 }
 
@@ -597,6 +664,56 @@ async function openResearchPrompt(index) {
   renderSongList();
 }
 
+// ===== Gemini APIで候補の公式らしさを判定 =====
+async function askGeminiForOfficialRanking(query, candidates) {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey || candidates.length === 0) return null;
+
+  const list = candidates.map((c, i) =>
+    `${i}: タイトル「${c.title}」 / チャンネル名「${c.channel}」`
+  ).join('\n');
+
+  const prompt = `あなたはYouTube動画から「公式音源・公式MV」を見分ける専門家だよ。
+検索したい曲: 「${query}」
+
+以下はYouTube検索で見つかった候補一覧だよ。この中から、公式のアーティスト本人・レコード会社が公開している「公式音源」「公式MV」らしい順に、番号を並べ替えてほしいよ。
+カバー、歌ってみた、弾いてみた、カラオケ、ピアノ楽譜、MIDI、AIアレンジ、ライブ映像、切り抜き動画などは非公式として下位に置いてね。
+もし全部が非公式に見える場合でも、必ず全ての番号を含めて並べ替えてね。
+
+候補一覧:
+${list}
+
+必ず以下のJSON形式のみで回答してね。説明文は不要だよ。
+{"order": [最も公式らしい番号, 次に公式らしい番号, ...]}`;
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0, responseMimeType: 'application/json' }
+        })
+      }
+    );
+    if (!res.ok) {
+      console.error('Gemini API error', res.status, await res.text().catch(() => ''));
+      return null;
+    }
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return null;
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed.order)) return null;
+    return parsed.order;
+  } catch (e) {
+    console.error('Gemini判定エラー', e);
+    return null;
+  }
+}
+
 async function searchOneSong(index) {
   const item = songs[index];
   try {
@@ -625,11 +742,38 @@ async function searchOneSong(index) {
           channel: v.snippet.channelTitle,
           thumb: v.snippet.thumbnails?.default?.url || '',
           score: officialScore(v.snippet),
-          official: isOfficialish(v.snippet)
+          official: isOfficialish(v.snippet),
+          definitelyNotOfficial: hasDefinitelyNotOfficialSignal(v.snippet)
         }));
       // スコア順に並び替え（公式っぽいものを上に）
       scored.sort((a, b) => b.score - a.score);
-      item.candidates = scored.slice(0, 5);
+
+      // 公式候補が1件でもあれば、「カバー・楽譜・MIDI確定」の候補は
+      // 無理に5件埋めるために混ぜ込まない(枠を埋めるだけの弱い候補を除外)
+      const hasOfficial = scored.some(c => c.official);
+      const filtered = hasOfficial
+        ? scored.filter(c => !c.definitelyNotOfficial)
+        : scored; // 公式が1件もなければ、選択肢を残すためあえて全部見せる
+
+      item.candidates = (filtered.length > 0 ? filtered : scored).slice(0, 5);
+
+      // AI判定(Gemini APIキーが設定されていれば追加で並び替えの参考にする)
+      const aiOrder = await askGeminiForOfficialRanking(item.query, item.candidates);
+      if (aiOrder && aiOrder.length > 0) {
+        item.candidates.forEach((c, i) => {
+          const rank = aiOrder.indexOf(i);
+          c.aiRank = rank === -1 ? 999 : rank;
+        });
+        // ルールベースのスコアを土台にしつつ、AIが1位に推した候補を最優先にする
+        item.candidates.sort((a, b) => {
+          if (a.aiRank !== b.aiRank) return a.aiRank - b.aiRank;
+          return b.score - a.score;
+        });
+        item.aiJudged = true;
+      } else {
+        item.aiJudged = false;
+      }
+
       item.selectedIndex = item.candidates.length > 0 ? 0 : -1;
       item.status = item.candidates.length > 0 ? 'ok' : 'none';
     } else {
@@ -658,6 +802,12 @@ function renderSongList() {
       badge.className = 'dup-badge';
       badge.textContent = '重複注意';
       header.appendChild(badge);
+    }
+    if (item.aiJudged) {
+      const aiBadge = document.createElement('span');
+      aiBadge.className = 'official-badge';
+      aiBadge.textContent = 'AI判定済み';
+      header.appendChild(aiBadge);
     }
     const researchBtn = document.createElement('button');
     researchBtn.className = 'btn-small';
