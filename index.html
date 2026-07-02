@@ -749,14 +749,24 @@ async function searchOneSong(index) {
       // スコア順に並び替え（公式っぽいものを上に）
       scored.sort((a, b) => b.score - a.score);
 
-      // 公式候補が1件でもあれば、「カバー・楽譜・MIDI確定」の候補は
-      // 無理に5件埋めるために混ぜ込まない(枠を埋めるだけの弱い候補を除外)
-      const hasOfficial = scored.some(c => c.official);
-      const filtered = hasOfficial
-        ? scored.filter(c => !c.definitelyNotOfficial)
-        : scored; // 公式が1件もなければ、選択肢を残すためあえて全部見せる
+      // 公式候補(ルールで確実に公式と判定できたもの)が1件でもあれば、
+      // それ以外の候補は思い切って全部間引く(Lia版・花澤香菜版のように、
+      // 明示的な「Cover」表記が無くても実質カバーな動画を混ぜ込ませないため)
+      const officialOnly = scored.filter(c => c.official);
+      const filtered = officialOnly.length > 0 ? officialOnly : scored;
 
-      item.candidates = (filtered.length > 0 ? filtered : scored).slice(0, 5);
+      item.candidates = filtered.slice(0, 5);
+
+      // 公式候補がゼロ件で、かつ残った候補も全部「カバー確定」シグナルありなら、
+      // 実質的に「見つからなかった」扱いにする(誤検索の紛れ込みを避けるため)
+      const allDefinitelyNotOfficial = item.candidates.length > 0 &&
+        item.candidates.every(c => c.definitelyNotOfficial);
+      if (officialOnly.length === 0 && allDefinitelyNotOfficial) {
+        item.candidates = [];
+        item.status = 'none';
+        item.noOfficialFound = true; // UIで「候補が見つからなかった(全部非公式)」と案内するためのフラグ
+        return;
+      }
 
       // AI判定(Gemini APIキーが設定されていれば追加で並び替えの参考にする)
       const aiOrder = await askGeminiForOfficialRanking(item.query, item.candidates);
@@ -831,7 +841,9 @@ function renderSongList() {
     } else if (item.status === 'none') {
       const s = document.createElement('div');
       s.className = 'status-none';
-      s.textContent = '✗ 見つからなかった';
+      s.textContent = item.noOfficialFound
+        ? '✗ 公式音源が見つからなかった（非公式のみだったため除外したよ）'
+        : '✗ 見つからなかった';
       block.appendChild(s);
     } else {
       const list = document.createElement('div');
