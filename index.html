@@ -593,8 +593,9 @@ const DEFINITELY_NOT_OFFICIAL = [
   'off vocal', 'オフボーカル', '歌唱', '仮歌', 'モノマネ', 'ものまね',
   'ボーカル講師', 'ボイトレ', 'アカペラ', 'acapella',
   'remix by', 'session', 'セッション',
-  'ピアノ楽譜', '楽譜あり', 'ピアノソロ', 'ピアノアレンジ', 'midi',
+  'ピアノ楽譜', '楽譜あり', 'ピアノソロ', 'ピアノアレンジ', 'ピアノ', 'midi',
   'ai で', 'aiで', 'aiアレンジ', 'ai cover',
+  '歌枠', '切り抜き', 'すたぽら', '歌枠切り抜き', '弾いてみました',
 ];
 
 function hasDefinitelyNotOfficialSignal(snippet) {
@@ -764,8 +765,13 @@ async function searchOneSong(index) {
           const rank = aiOrder.indexOf(i);
           c.aiRank = rank === -1 ? 999 : rank;
         });
-        // ルールベースのスコアを土台にしつつ、AIが1位に推した候補を最優先にする
+        // 優先順位: ①ルールベースで「確実に公式」と分かっているもの(official===true)を最優先
+        //           ②その中/外はAIのランキングを参考に並び替え
+        //           ③最後にルールベースのスコアで細かく調整
+        // ルールで公式確定してるチャンネル(-Topic, VEVO, レコード会社名, spcl ryo等)は
+        // AIが間違って別の動画を上位に推してきても、それより常に上に来るようにする
         item.candidates.sort((a, b) => {
+          if (a.official !== b.official) return a.official ? -1 : 1;
           if (a.aiRank !== b.aiRank) return a.aiRank - b.aiRank;
           return b.score - a.score;
         });
