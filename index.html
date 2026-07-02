@@ -497,21 +497,44 @@ const KNOWN_COVER_CHANNELS = [
   'カラオケ歌市場',
 ];
 
-// 公式らしさスコアリング
+// 主要レコード会社・レーベル名(チャンネル名にこれが入ってれば最優先階層)
+const RECORD_LABELS = [
+  'king records', 'キングレコード',
+  'sony music', 'ソニーミュージック',
+  'avex', 'エイベックス',
+  'universal music', 'ユニバーサルミュージック',
+  'warner music', 'ワーナーミュージック',
+  'toy\'s factory', 'トイズファクトリー',
+  'victor entertainment', 'ビクターエンタテインメント',
+  'pony canyon', 'ポニーキャニオン',
+  'jvckenwood',
+  'defstar records',
+  'nippon columbia', '日本コロムビア',
+];
+
+// 「公式最優先」階層判定：チャンネル名だけを見て最上位グループかどうかを決める
+// (タイトルに紛れ込む単語ではなく、投稿主のチャンネル自体が公式かどうかで判定するのがポイント)
+function isTopTierOfficial(snippet) {
+  const channel = (snippet.channelTitle || '').toLowerCase();
+  if (channel.includes('- topic')) return true; // YouTube自動生成トピックチャンネル(公式音源のみが対象)
+  if (channel.includes('vevo')) return true;
+  if (channel.endsWith('official') || channel.includes(' official') || channel.includes('official ')) return true;
+  if (RECORD_LABELS.some(label => channel.includes(label))) return true;
+  return false;
+}
+
+// 公式らしさスコアリング(同じ階層内での並び替え用の細かい調整に使う)
 function officialScore(snippet) {
   const channel = (snippet.channelTitle || '').toLowerCase();
   const title = (snippet.title || '').toLowerCase();
   let score = 0;
 
-  // 加点要素(公式らしさ)
-  if (channel.includes('- topic')) score += 100; // YouTube自動生成トピックチャンネル(ほぼ公式音源)
-  if (channel.includes('official')) score += 60;
+  if (isTopTierOfficial(snippet)) score += 1000; // 最優先階層は常にトップ固定
   if (title.includes('official')) score += 30;
   if (title.includes('mv') || title.includes('music video')) score += 15;
-  if (channel.includes('vevo')) score += 60;
   if (channel.includes('records') || channel.includes('レコード') || channel.includes('music entertainment')) score += 20;
 
-  // 減点要素(カバー・歌ってみた・カラオケ系)
+  // 減点要素(カバー・歌ってみた・カラオケ系) ※タイトルだけでなくチャンネル名も広く判定
   const negativeKeywords = [
     'cover', 'カバー', '歌ってみた', '弾いてみた', '弾き語り',
     'practice', 'karaoke', 'カラオケ', 'instrumental', 'inst.',
@@ -533,7 +556,7 @@ function officialScore(snippet) {
   return score;
 }
 function isOfficialish(snippet) {
-  return officialScore(snippet) >= 30;
+  return isTopTierOfficial(snippet) || officialScore(snippet) >= 30;
 }
 function isBlacklisted(snippet) {
   const channel = (snippet.channelTitle || '').toLowerCase();
@@ -559,7 +582,10 @@ async function searchOneSong(index) {
   try {
     const url = new URL('https://www.googleapis.com/youtube/v3/search');
     url.searchParams.set('part', 'snippet');
-    url.searchParams.set('q', item.query + ' 音楽');
+    // 単語間のスペースを確実に保つ(IKU + RIDEBACK が「IKURIDEBACK」のように
+    // くっついて誤検索されるのを防ぐため、明示的にスペースで単語を区切り直す)
+    const normalizedQuery = item.query.trim().replace(/\s+/g, ' ');
+    url.searchParams.set('q', normalizedQuery + ' 音楽');
     url.searchParams.set('type', 'video');
     url.searchParams.set('videoCategoryId', '10');
     url.searchParams.set('maxResults', '8');
