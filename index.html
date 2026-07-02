@@ -344,6 +344,13 @@ async function searchOneSong(index) {
   }
 }
 
+function decodeHtmlEntities(str) {
+  if (!str) return '';
+  const el = document.createElement('textarea');
+  el.innerHTML = str;
+  return el.value;
+}
+
 function renderSongList() {
   els.songList.innerHTML = '';
   searchResults.forEach((item, i) => {
@@ -371,7 +378,7 @@ function renderSongList() {
     info.className = 'song-info';
     const title = document.createElement('div');
     title.className = 'song-title';
-    title.textContent = item.status === 'ok' ? item.title : item.query;
+    title.textContent = item.status === 'ok' ? decodeHtmlEntities(item.title) : item.query;
     const channel = document.createElement('div');
     channel.className = 'song-channel';
     channel.textContent = item.status === 'ok' ? item.channel : (item.status === 'searching' ? '検索中...' : '見つからなかった');
