@@ -485,6 +485,8 @@ els.searchBtn.addEventListener('click', async () => {
 // 小文字化して部分一致でチェックするよ
 const KNOWN_COVER_CHANNELS = [
   'highnote',
+  'high_note',
+  'high note',
   'uta owl',
   'utaowl',
   'カラオケうたたね',
@@ -495,14 +497,18 @@ const KNOWN_COVER_CHANNELS = [
   'lalatv',
   'karaoke',
   'カラオケ歌市場',
+  'anime fake music',
+  'fleufleu',
+  'dさん',
+  'ピアノ楽譜',
 ];
 
 // 主要レコード会社・レーベル名(チャンネル名にこれが入ってれば最優先階層)
 const RECORD_LABELS = [
-  'king records', 'キングレコード',
+  'king records', 'キングレコード', 'king amusement creative',
   'sony music', 'ソニーミュージック',
   'avex', 'エイベックス',
-  'universal music', 'ユニバーサルミュージック',
+  'universal music', 'ユニバーサルミュージック', 'nbcuniversal',
   'warner music', 'ワーナーミュージック',
   'toy\'s factory', 'トイズファクトリー',
   'victor entertainment', 'ビクターエンタテインメント',
@@ -512,9 +518,30 @@ const RECORD_LABELS = [
   'nippon columbia', '日本コロムビア',
 ];
 
+// タイトル・チャンネル名に入っていたら「カバー・二次創作が確定」とみなすキーワード
+// これに該当したら、公式最優先階層(Official等)であっても強制的に弾く
+const DEFINITELY_NOT_OFFICIAL = [
+  'cover', 'カバー', '歌ってみた', '弾いてみた', '弾き語り', '叩いてみた',
+  'アレンジしてみた', 'リメイクしてみた', 'アレンジ・リメイク',
+  'practice', 'karaoke', 'カラオケ', 'instrumental', 'inst.',
+  'off vocal', 'オフボーカル', '歌唱', '仮歌', 'モノマネ', 'ものまね',
+  'ボーカル講師', 'ボイトレ', 'アカペラ', 'acapella',
+  'remix by', 'session', 'セッション',
+  'ピアノ楽譜', '楽譜あり', 'ピアノソロ', 'ピアノアレンジ',
+  'ai で', 'aiで', 'aiアレンジ', 'ai cover',
+];
+
+function hasDefinitelyNotOfficialSignal(snippet) {
+  const channel = (snippet.channelTitle || '').toLowerCase();
+  const title = (snippet.title || '').toLowerCase();
+  return DEFINITELY_NOT_OFFICIAL.some(kw => title.includes(kw) || channel.includes(kw));
+}
+
 // 「公式最優先」階層判定：チャンネル名だけを見て最上位グループかどうかを決める
 // (タイトルに紛れ込む単語ではなく、投稿主のチャンネル自体が公式かどうかで判定するのがポイント)
+// ただしカバー確定シグナルがあれば、たとえチャンネル名が"Official"を名乗っていても除外する
 function isTopTierOfficial(snippet) {
+  if (hasDefinitelyNotOfficialSignal(snippet)) return false; // カバー確定なら問答無用で対象外
   const channel = (snippet.channelTitle || '').toLowerCase();
   if (channel.includes('- topic')) return true; // YouTube自動生成トピックチャンネル(公式音源のみが対象)
   if (channel.includes('vevo')) return true;
@@ -534,29 +561,22 @@ function officialScore(snippet) {
   if (title.includes('mv') || title.includes('music video')) score += 15;
   if (channel.includes('records') || channel.includes('レコード') || channel.includes('music entertainment')) score += 20;
 
-  // 減点要素(カバー・歌ってみた・カラオケ系) ※タイトルだけでなくチャンネル名も広く判定
-  const negativeKeywords = [
-    'cover', 'カバー', '歌ってみた', '弾いてみた', '弾き語り',
-    'practice', 'karaoke', 'カラオケ', 'instrumental', 'inst.',
-    'off vocal', 'オフボーカル', '歌唱', '仮歌', 'モノマネ',
-    'sing', 'ボーカル講師', 'ボイトレ', 'アカペラ', 'acapella',
-    'remix by', 'session', 'セッション', 'ものまね',
-  ];
-  negativeKeywords.forEach(kw => {
-    if (title.includes(kw)) score -= 55;
-    if (channel.includes(kw)) score -= 70;
+  // 減点要素(カバー・歌ってみた・カラオケ系など、確定シグナル一覧を流用)
+  DEFINITELY_NOT_OFFICIAL.forEach(kw => {
+    if (title.includes(kw)) score -= 200; // 公式スコア(+1000)を確実に打ち消せる強さにする
+    if (channel.includes(kw)) score -= 250;
   });
   if (title.includes('live') || title.includes('ライブ')) score -= 10;
 
   // 既知の非公式チャンネル(カバー曲であることを明示しない悪質チャンネル含む)は問答無用で大幅減点
   if (KNOWN_COVER_CHANNELS.some(bad => channel.includes(bad))) {
-    score -= 500;
+    score -= 800;
   }
 
   return score;
 }
 function isOfficialish(snippet) {
-  return isTopTierOfficial(snippet) || officialScore(snippet) >= 30;
+  return isTopTierOfficial(snippet);
 }
 function isBlacklisted(snippet) {
   const channel = (snippet.channelTitle || '').toLowerCase();
