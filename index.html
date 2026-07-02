@@ -816,9 +816,15 @@ function normalizeForMatch(str) {
     .trim();
 }
 
-// 検索クエリ(曲名・アーティスト名)が、候補のタイトルに全く含まれていないかチェックする
-// 「公式チャンネルだけど全然関係ない曲がヒットしてる」パターン(RIDEBACK問題)を検出するため
-function looksUnrelatedToQuery(query, candidateTitle) {
+// 検索クエリ(曲名・アーティスト名)が、候補のタイトルにどれだけ一致しているかチェックする
+// 「公式チャンネルだけど全然関係ない曲がヒットしてる」パターン(RIDEBACK問題)や、
+// 「曲名は一致するけど別アーティストのカバー」(千本桜→和楽器バンド版が混ざる問題)を
+// 検出するため、単語の一致率をチェックするよ
+// isTopicChannel: "-Topic"チャンネルは著作権者ごとに自動生成される専用チャンネルだから、
+// タイトルにアーティスト名が入っていなくても信頼度が高い。なので判定を緩めにするよ。
+// それ以外(avex等のレーベル包括チャンネル)は、同じレーベル内の別アーティストの
+// カバー版が紛れ込みやすいので、厳しめ(過半数一致)にするよ
+function looksUnrelatedToQuery(query, candidateTitle, isTopicChannel) {
   const normalizedQuery = normalizeForMatch(query);
   const normalizedTitle = normalizeForMatch(candidateTitle);
 
@@ -831,8 +837,13 @@ function looksUnrelatedToQuery(query, candidateTitle) {
   if (words.length === 0) return false; // 判定できない場合は「無関係」とはみなさない
 
   const matchCount = words.filter(w => normalizedTitle.includes(w)).length;
-  // クエリの単語のうち、タイトルに1つも一致しなければ「無関係の可能性が高い」と判定
-  return matchCount === 0;
+
+  if (isTopicChannel) {
+    // Topicチャンネルは1語でも一致すればOK(従来通りの緩い基準)
+    return matchCount === 0;
+  }
+  // それ以外は過半数一致を要求する厳しめの基準
+  return matchCount / words.length <= 0.5;
 }
 
 async function performYoutubeSearch(query) {
@@ -903,7 +914,9 @@ async function searchOneSong(index) {
     item.status = item.candidates.length > 0 ? 'ok' : 'none';
   } catch (e) {
     console.error('search error', item.query, e);
-    item.status = 'none';
+    // クォータ超過等のAPIエラーは「見つからなかった」と紛らわしいので分けて表示するよ
+    item.status = 'error';
+    item.errorMessage = e.message || '不明なエラー';
   }
 }
 
@@ -912,18 +925,21 @@ async function searchOneSong(index) {
 function buildScoredCandidates(query, items) {
   return items
     .filter(v => !isBlacklisted(v.snippet)) // 悪質チャンネルは候補から完全除外
-    .map(v => ({
-      videoId: v.id.videoId,
-      title: decodeHtmlEntities(v.snippet.title),
-      channel: v.snippet.channelTitle,
-      thumb: v.snippet.thumbnails?.default?.url || '',
-      score: officialScore(v.snippet),
-      official: isOfficialish(v.snippet),
-      definitelyNotOfficial: hasDefinitelyNotOfficialSignal(v.snippet),
-      titleMismatch: looksUnrelatedToQuery(query, decodeHtmlEntities(v.snippet.title)),
-      versionMismatch: hasVersionMismatchSignal(v.snippet),
-      shortVersion: hasShortVersionSignal(v.snippet)
-    }))
+    .map(v => {
+      const isTopicChannel = (v.snippet.channelTitle || '').toLowerCase().includes('- topic');
+      return {
+        videoId: v.id.videoId,
+        title: decodeHtmlEntities(v.snippet.title),
+        channel: v.snippet.channelTitle,
+        thumb: v.snippet.thumbnails?.default?.url || '',
+        score: officialScore(v.snippet),
+        official: isOfficialish(v.snippet),
+        definitelyNotOfficial: hasDefinitelyNotOfficialSignal(v.snippet),
+        titleMismatch: looksUnrelatedToQuery(query, decodeHtmlEntities(v.snippet.title), isTopicChannel),
+        versionMismatch: hasVersionMismatchSignal(v.snippet),
+        shortVersion: hasShortVersionSignal(v.snippet)
+      };
+    })
     .sort((a, b) => b.score - a.score);
 }
 
@@ -963,6 +979,11 @@ function renderSongList() {
       const s = document.createElement('div');
       s.className = 'status-searching';
       s.innerHTML = '<span class="spinner"></span> 検索中...';
+      block.appendChild(s);
+    } else if (item.status === 'error') {
+      const s = document.createElement('div');
+      s.className = 'status-none';
+      s.textContent = `⚠ エラーが起きて検索できなかったよ（${item.errorMessage}）。クォータ上限の可能性があるよ`;
       block.appendChild(s);
     } else if (item.status === 'none') {
       const s = document.createElement('div');
