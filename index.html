@@ -613,6 +613,8 @@ const DEFINITELY_NOT_OFFICIAL = [
   'ai で', 'aiで', 'aiアレンジ', 'ai cover',
   '歌枠', '切り抜き', 'すたぽら', '歌枠切り抜き', '弾いてみました',
   'マッシュアップ', 'mashup', '歌い方', '解説', 'ボイストレーナー',
+  '替え歌', 'パロディ', 'parody', '空耳', '本人反応', 'reaction',
+  '歌詞違い', 'ネタ動画',
 ];
 
 // 「オリジナルとは歌い手やアレンジが違うバージョン」を示すことが多いキーワード
@@ -833,90 +835,96 @@ function looksUnrelatedToQuery(query, candidateTitle) {
   return matchCount === 0;
 }
 
+async function performYoutubeSearch(query) {
+  const url = new URL('https://www.googleapis.com/youtube/v3/search');
+  url.searchParams.set('part', 'snippet');
+  const normalizedQuery = query.trim().replace(/\s+/g, ' ');
+  url.searchParams.set('q', normalizedQuery);
+  url.searchParams.set('type', 'video');
+  url.searchParams.set('videoCategoryId', '10');
+  url.searchParams.set('maxResults', '15');
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+  addQuota(100);
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData?.error?.message || res.status);
+  }
+  const data = await res.json();
+  return data.items || [];
+}
+
 async function searchOneSong(index) {
   const item = songs[index];
   try {
-    const url = new URL('https://www.googleapis.com/youtube/v3/search');
-    url.searchParams.set('part', 'snippet');
-    // 単語間のスペースを確実に保つ(IKU + RIDEBACK が「IKURIDEBACK」のように
-    // くっついて誤検索されるのを防ぐため、明示的にスペースで単語を区切り直す)
-    const normalizedQuery = item.query.trim().replace(/\s+/g, ' ');
-    url.searchParams.set('q', normalizedQuery + ' 音楽');
-    url.searchParams.set('type', 'video');
-    url.searchParams.set('videoCategoryId', '10');
-    url.searchParams.set('maxResults', '8');
-    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
-    addQuota(100);
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData?.error?.message || res.status);
+    // 1回目: 通常のクエリ(曲名+音楽)で検索
+    let items = await performYoutubeSearch(item.query + ' 音楽');
+    let scored = buildScoredCandidates(item.query, items);
+    let officialOnly = scored.filter(c => c.official && !c.titleMismatch);
+
+    // 1回目で公式候補が0件なら、"official"を明示的に足して2回目の救済検索をする
+    // (人気曲だとカバー・歌ってみたに埋もれて本家が上位8~15件に入らないケースがあるため)
+    if (officialOnly.length === 0) {
+      const items2 = await performYoutubeSearch(item.query + ' official');
+      const scored2 = buildScoredCandidates(item.query, items2);
+      const officialOnly2 = scored2.filter(c => c.official && !c.titleMismatch);
+      if (officialOnly2.length > 0) {
+        scored = scored2;
+        officialOnly = officialOnly2;
+      }
     }
-    const data = await res.json();
-    if (data.items && data.items.length > 0) {
-      const scored = data.items
-        .filter(v => !isBlacklisted(v.snippet)) // 悪質チャンネルは候補から完全除外
-        .map(v => ({
-          videoId: v.id.videoId,
-          title: decodeHtmlEntities(v.snippet.title),
-          channel: v.snippet.channelTitle,
-          thumb: v.snippet.thumbnails?.default?.url || '',
-          score: officialScore(v.snippet),
-          official: isOfficialish(v.snippet),
-          definitelyNotOfficial: hasDefinitelyNotOfficialSignal(v.snippet),
-          titleMismatch: looksUnrelatedToQuery(item.query, decodeHtmlEntities(v.snippet.title)),
-          versionMismatch: hasVersionMismatchSignal(v.snippet),
-          shortVersion: hasShortVersionSignal(v.snippet)
-        }));
-      // スコア順に並び替え（公式っぽいものを上に）
-      scored.sort((a, b) => b.score - a.score);
 
-      // 公式チャンネル(-Topic, VEVO, レコード会社等)かつ曲名も一致してる候補だけを採用するよ。
-      // これが0件の場合、非公式動画をフォールバックとして絶対に出さない
-      // (「歌い方解説」「マッシュアップ」等、キーワードリストに載ってないカバー系動画が
-      //  紛れ込むのを防ぐため。キーワードを無限に追加するより、公式候補が無ければ
-      //  素直に「見つからなかった」と言う方が安全、という判断だよ)
-      const officialOnly = scored.filter(c => c.official && !c.titleMismatch);
-
-      if (officialOnly.length === 0) {
-        item.candidates = [];
-        item.status = 'none';
-        item.noOfficialFound = true; // UIで「候補が見つからなかった(公式が無かった)」と案内するためのフラグ
-        return;
-      }
-
-      item.candidates = officialOnly.slice(0, 5);
-
-      // AI判定(Gemini APIキーが設定されていれば追加で並び替えの参考にする)
-      const aiOrder = await askGeminiForOfficialRanking(item.query, item.candidates);
-      if (aiOrder && aiOrder.length > 0) {
-        item.candidates.forEach((c, i) => {
-          const rank = aiOrder.indexOf(i);
-          c.aiRank = rank === -1 ? 999 : rank;
-        });
-        // 優先順位: ①ルールベースで「確実に公式」と分かっているもの(official===true)を最優先
-        //           ②その中/外はAIのランキングを参考に並び替え
-        //           ③最後にルールベースのスコアで細かく調整
-        // ルールで公式確定してるチャンネル(-Topic, VEVO, レコード会社名, spcl ryo等)は
-        // AIが間違って別の動画を上位に推してきても、それより常に上に来るようにする
-        item.candidates.sort((a, b) => {
-          if (a.official !== b.official) return a.official ? -1 : 1;
-          if (a.aiRank !== b.aiRank) return a.aiRank - b.aiRank;
-          return b.score - a.score;
-        });
-        item.aiJudged = true;
-      } else {
-        item.aiJudged = false;
-      }
-
-      item.selectedIndex = item.candidates.length > 0 ? 0 : -1;
-      item.status = item.candidates.length > 0 ? 'ok' : 'none';
-    } else {
+    if (officialOnly.length === 0) {
+      item.candidates = [];
       item.status = 'none';
+      item.noOfficialFound = true; // UIで「候補が見つからなかった(公式が無かった)」と案内するためのフラグ
+      return;
     }
+
+    item.candidates = officialOnly.slice(0, 5);
+
+    // AI判定(Gemini APIキーが設定されていれば追加で並び替えの参考にする)
+    const aiOrder = await askGeminiForOfficialRanking(item.query, item.candidates);
+    if (aiOrder && aiOrder.length > 0) {
+      item.candidates.forEach((c, i) => {
+        const rank = aiOrder.indexOf(i);
+        c.aiRank = rank === -1 ? 999 : rank;
+      });
+      item.candidates.sort((a, b) => {
+        if (a.official !== b.official) return a.official ? -1 : 1;
+        if (a.aiRank !== b.aiRank) return a.aiRank - b.aiRank;
+        return b.score - a.score;
+      });
+      item.aiJudged = true;
+    } else {
+      item.aiJudged = false;
+    }
+
+    item.selectedIndex = item.candidates.length > 0 ? 0 : -1;
+    item.status = item.candidates.length > 0 ? 'ok' : 'none';
   } catch (e) {
     console.error('search error', item.query, e);
     item.status = 'none';
   }
+}
+
+// YouTube検索結果のitems配列から、スコアリング済みの候補リストを組み立てる
+// (1回目・2回目(救済検索)どちらでも共通で使う処理を切り出したよ)
+function buildScoredCandidates(query, items) {
+  return items
+    .filter(v => !isBlacklisted(v.snippet)) // 悪質チャンネルは候補から完全除外
+    .map(v => ({
+      videoId: v.id.videoId,
+      title: decodeHtmlEntities(v.snippet.title),
+      channel: v.snippet.channelTitle,
+      thumb: v.snippet.thumbnails?.default?.url || '',
+      score: officialScore(v.snippet),
+      official: isOfficialish(v.snippet),
+      definitelyNotOfficial: hasDefinitelyNotOfficialSignal(v.snippet),
+      titleMismatch: looksUnrelatedToQuery(query, decodeHtmlEntities(v.snippet.title)),
+      versionMismatch: hasVersionMismatchSignal(v.snippet),
+      shortVersion: hasShortVersionSignal(v.snippet)
+    }))
+    .sort((a, b) => b.score - a.score);
 }
 
 function renderSongList() {
