@@ -622,9 +622,15 @@ const DEFINITELY_NOT_OFFICIAL = [
 // 注意2: "feat." "ft." はボカロ曲(例: Orangestar feat. IA)では単なる公式表記として
 // 使われることが多く、誤判定が多かったのでここからは除外したよ。あくまで
 // 「リミックス」を示す語のみに絞る
+// 注意3: 「10th ANNIVERSARY MIX」のように、括弧無しの単独MIX表記もあるため
+// 単語境界つきの"mix"も別途 hasVersionMismatchSignal 側でチェックするよ
 const VERSION_MISMATCH_SIGNALS = [
   'remix', 'リミックス', 'mix]', 'mix)',
 ];
+
+// タイトル中に「×」「x」等で本人以外のアーティスト名が併記されている(コラボ・別バージョン)
+// パターンを検出する正規表現。「ryo (supercell) × やなぎなぎ」のような表記を拾うよ
+const COLLAB_TITLE_PATTERN = /[×✕✖]/;
 
 // フル尺ではない「短縮版・TVサイズ」を示すキーワード
 // (マスターがフル尺だけ聴きたい場合に、これらを検出して除外するために使う)
@@ -644,7 +650,14 @@ function hasDefinitelyNotOfficialSignal(snippet) {
 //  登録されていても中身がオリジナルと違うバージョンである可能性が高いケースを拾う)
 function hasVersionMismatchSignal(snippet) {
   const title = (snippet.title || '').toLowerCase();
-  return VERSION_MISMATCH_SIGNALS.some(kw => title.includes(kw));
+  if (VERSION_MISMATCH_SIGNALS.some(kw => title.includes(kw))) return true;
+  // 「10th ANNIVERSARY MIX」のように、単独の"mix"が単語として登場するケースも拾う
+  // (「mixing」等の別単語に誤爆しないよう、単語境界付きでチェックするよ)
+  if (/\bmix\b/.test(title)) return true;
+  // 「ryo (supercell) × やなぎなぎ」のように、×記号で別アーティスト名が
+  // 併記されているタイトルは、本人単独のオリジナルとは違うバージョンの可能性が高い
+  if (COLLAB_TITLE_PATTERN.test(snippet.title || '')) return true;
+  return false;
 }
 
 // タイトルに「短縮版・TVサイズ」を示すシグナルがあるかチェックする
@@ -658,6 +671,16 @@ function hasShortVersionSignal(snippet) {
 function hasProvidedToYoutubeSignal(snippet) {
   const desc = (snippet.description || '').toLowerCase();
   return desc.includes('provided to youtube by') || desc.includes('提供元:');
+}
+
+// タイトル自体に「Official Video/MV/Music Video」等の明示的な公式表記があるかチェックする
+// (Orangestarのような、レーベル名やTopicチャンネルを介さず本人が直接運用している
+//  チャンネルだと、チャンネル名だけでは公式と判定できないケースがあるため)
+function hasOfficialTitleSignal(snippet) {
+  const title = (snippet.title || '').toLowerCase();
+  return title.includes('official video') || title.includes('official mv') ||
+         title.includes('official music video') || title.includes('official audio') ||
+         title.includes('公式mv') || title.includes('公式video');
 }
 
 // 「公式最優先」階層判定：チャンネル名だけを見て最上位グループかどうかを決める
@@ -674,6 +697,10 @@ function isTopTierOfficial(snippet) {
   if (channel.endsWith('official') || channel.includes(' official') || channel.includes('official ')) return true;
   if (RECORD_LABELS.some(label => channel.includes(label))) return true;
   if (ARTIST_OFFICIAL_CHANNELS.some(name => channel === name || channel.includes(name))) return true;
+  // チャンネル名だけでは公式と分からなくても、タイトルに明示的な公式表記があれば
+  // 個人アーティスト運用チャンネル(Orangestar等)の可能性が高いので公式候補に含める
+  // (悪質チャンネルは既にisBlacklistedで弾かれてる前提だよ)
+  if (hasOfficialTitleSignal(snippet)) return true;
   return false;
 }
 
